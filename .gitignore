@@ -1,0 +1,4 @@
+*.pyc
+high_density_examples/
+low_density_examples/
+*__pycache__/
