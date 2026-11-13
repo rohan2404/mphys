@@ -8,7 +8,7 @@ from PIL import Image
 import tifffile
 
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 def preprocess_frame(frame, homography, drift_xy=(0.0, 0.0)):
     """Return left and registered right frames, drift-corrected in left pixels.
@@ -33,13 +33,12 @@ def preprocess_frame(frame, homography, drift_xy=(0.0, 0.0)):
         right = shift(right, (-dy, -dx), mode='constant', cval=0.0)
     return left, right
 
-def _register_right(right, homography):
-    """Apply the homography to one right-channel frame in a worker thread."""
-    import cv2
-
-    height, width = right.shape
-    return cv2.warpPerspective(right.astype(np.float32), homography, (width, height),
-                               flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+def _process_frame(frame, homography, drift_xy, keep_right):
+    """Register and correct one frame in a worker, ready for ordered writing."""
+    left, right = preprocess_frame(frame, homography, drift_xy)
+    pixels = np.clip(np.rint(np.concatenate((left, right), axis=1)),
+                     0, 65535).astype(np.uint16)
+    return pixels, right if keep_right else None
 
 
 
@@ -210,17 +209,20 @@ def _plot_diagnostics(first_raw, first_right, last_right, H, plot_localisations,
 
 
 def preprocess_tif(input_path, output_path, *, plot_localisations=False,
-                   plot_drift=False, box_radius=12):
+                   plot_drift=False, box_radius=12, max_workers=None):
     """Write a registered and drift-corrected TIFF using the viewer defaults.
 
     Output frames retain the input layout: left next to registered right. They
-    are float32, preserving subpixel interpolation values, and saved as BigTIFF
-    without copying acquisition metadata. Original frame count is preserved;
+    are rounded and clipped to uint16 and saved as BigTIFF without copying
+    acquisition metadata. Original frame count is preserved;
     split input files are processed individually. Existing output is not replaced.
 
     When requested, return matplotlib figures in addition to the homography and
     per-frame drift. The drift figure marks the brightest *pixel* in a fixed
     box in each frame; it does not prove that the peaks are the same object.
+    max_workers controls the number of frame-processing processes. In a standalone
+    script on macOS or Windows, call this function under an
+    ``if __name__ == '__main__':`` guard.
     """
     input_path, output_path = Path(input_path), Path(output_path)
     if input_path.resolve() == output_path.resolve():
@@ -231,6 +233,10 @@ def preprocess_tif(input_path, output_path, *, plot_localisations=False,
         raise ValueError('box_radius must be a positive integer')
     if not output_path.parent.is_dir():
         raise FileNotFoundError(f'Output directory does not exist: {output_path.parent}')
+    if max_workers is None:
+        max_workers = min(8, os.cpu_count() or 4)
+    if not isinstance(max_workers, int) or isinstance(max_workers, bool) or max_workers < 1:
+        raise ValueError('max_workers must be a positive integer')
 
     # OPTIMISATION: time this preparation separately from frame export below.
     # prepare_correction above localises sampled frames in batches and
@@ -243,19 +249,16 @@ def preprocess_tif(input_path, output_path, *, plot_localisations=False,
                                          dir=output_path.parent, delete=False) as tmp:
             temporary_path = Path(tmp.name)
 
-        max_workers = min(8, os.cpu_count() or 4)
         # Bound the number of frames held by the writer and workers.
         max_in_flight = max_workers * 2
         
         with Image.open(input_path) as movie, \
              tifffile.TiffWriter(temporary_path, bigtiff=True) as writer, \
-             ThreadPoolExecutor(max_workers=max_workers) as executor:
-            from scipy.ndimage import shift
-
+             ProcessPoolExecutor(max_workers=max_workers) as executor:
             n_frames = movie.n_frames #type: ignore
             homography = correction['homography']
             drifts = correction['drift']          
-            # Keep the left frame with its right-channel registration future.
+            # Keep futures in frame order, regardless of which worker finishes first.
             pending = deque()
             next_to_submit = 0
             def submit_frame(idx):
@@ -266,28 +269,23 @@ def preprocess_tif(input_path, output_path, *, plot_localisations=False,
                     first_raw = raw
                 if raw.ndim != 2 or raw.shape[1] % 2:
                     raise ValueError('Expected a grayscale frame with two equal-width halves')
-                midpoint = raw.shape[1] // 2
-                fut = executor.submit(_register_right, raw[:, midpoint:].copy(), homography)
-                pending.append((idx, raw[:, :midpoint].copy(), fut))
+                keep_right = ((idx == 0 and (plot_localisations or plot_drift)) or
+                              (idx == n_frames - 1 and plot_drift))
+                fut = executor.submit(_process_frame, raw, homography, drifts[idx], keep_right)
+                pending.append((idx, fut))
             # 1. Prime the pipeline with the initial batch of frames
             while next_to_submit < min(max_in_flight, n_frames):
                 submit_frame(next_to_submit)
                 next_to_submit += 1
             # 2. Drain the oldest completed frame in strict order, then submit 1 new frame
             while pending:
-                index, left_raw, fut = pending.popleft()
-                right = fut.result()  # Wait for the oldest frame to preserve TIFF order.
+                index, fut = pending.popleft()
+                pixels, right = fut.result()  # Preserve the original TIFF frame order.
                 if next_to_submit < n_frames:
                     submit_frame(next_to_submit)
                     next_to_submit += 1
-                left = left_raw.astype(np.float32)
-                dx, dy = drifts[index]
-                if dx or dy:
-                    left = shift(left, (-dy, -dx), mode='constant', cval=0.0)
-                    right = shift(right, (-dy, -dx), mode='constant', cval=0.0)
-                combined = np.concatenate((left, right), axis=1)
                 writer.write(
-                    np.clip(np.rint(combined), 0, 65535),#.astype(np.uint16),
+                    pixels,
                     photometric='minisblack',
                     contiguous=True,
                     metadata=None

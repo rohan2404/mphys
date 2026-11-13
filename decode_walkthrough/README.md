@@ -1,38 +1,16 @@
-# DECODE lab walkthrough
+# Start here: DECODE walkthrough
 
-Open the numbered notebooks in order:
+Open these notebooks in VS Code and select **Python (DECODE Intel)** as the kernel. Run the cells from top to bottom with Shift+Enter.
 
-1. `01_simulation.ipynb` — run DECODE's example spline simulator; explore signal, background and noise, and compare the left and right halves of a raw frame.
-2. `02_psf_calibration.ipynb` — understand and inspect a bead z-stack and follow the external SMAP spline-calibration workflow. This notebook does **not** itself fit a PSF.
-3. `03_train_scratch.ipynb` — prepare a short example run from random initialization.
-4. `04_fine_tune.ipynb` — prepare an example warm start from the bundled weights, using `finetune.py`.
-5. `05_predict.ipynb` — fit a small number of example frames, then set up a cautious own-data test.
+1. **[Look at your data and simulate a frame](01_simulation.ipynb).** See the left and right halves of a raw TIFF, then generate example frames with adjustable emitter density and background.
+2. **[Understand PSF calibration](02_psf_calibration.ipynb).** See an example bead z-stack and learn what to ask the data collector for. The actual spline fit is done in SMAP, not this notebook.
+3. **[Run the supplied example network](05_predict.ipynb).** See predicted molecule positions on a small crop of DECODE's example data. This does not train.
+4. **[Train from scratch](03_train_scratch.ipynb)** and **[warm-start training](04_fine_tune.ipynb)** are optional once the example makes sense. Both prepare short *example* runs; they are not ready-to-use models for your recordings. Training on this Mac uses the CPU and can be slow.
 
-## Configuration
+## Changing settings
 
-Edit `config.yaml` and rerun the notebook from its first cell. Paths are relative to the project root unless absolute. The `paths` section points at DECODE’s example model and its original parameter files; `example_simulation` and `example_training` control the example demonstrations. For an own-data prediction, set `prediction.use_example: false`, choose a channel, and fill its matching model, parameter file, camera settings and mirroring. Values under `own_data.pixel_size_nm` and channel `calibration_file` are documentation placeholders; they do **not** change example training or a saved model. Your own training requires a separately adapted DECODE parameter file.
+Edit [config.yaml](config.yaml), save it, and rerun a notebook from its first cell. For example, set `own_data.raw_tiff` to a path to view another recording, or change `example_simulation.background_photons` and `emitter_average` to see their effect. Relative paths start at the project root (`mphys`).
 
-## Bring to the lab PC
+The example model, calibration and camera settings come from DECODE's bundled experiment. They are not measurements of your Nanoimager. The `own_data` entries for pixel size and calibration are notes; they do not automatically adapt the example training. For your own data you need a matching PSF, camera parameters, a suitable trained model and its parameter file. Check orientation, crop offsets, registration and drift before combining channels. The prediction notebook does not automatically map localisations back to the original two-channel frame.
 
-Copy this `decode_walkthrough` folder **including `finetune.py`**, and the complete `experimental_data_workflow` folder, into the same project folder. Bring your raw TIFFs and corresponding acquisition metadata if permitted. The example TIFF and bead stacks are large; allow time and disk space. The pre-existing folder is DECODE's example, not your experiment. You do not need to copy `.venv` or a Conda environment between machines. The notebooks set `ROOT` to the current directory or its parent; edit the first code cell if the files are elsewhere.
-
-Ask the data collector for channel-specific bead z-stacks or an existing compatible SMAP `3dcal.mat`, channel/orientation, z step, camera offset, sensitivity (electrons per ADU), read noise, exposure and other camera settings. The two checked low-density recordings report 117 nm per pixel; check metadata for each dataset. Without suitable calibration, the example can demonstrate DECODE but cannot establish a valid Nanoimager model.
-
-## Install DECODE on the lab computer
-
-With Conda installed, use the [official instructions](https://decode.readthedocs.io/en/release-0.10/installation.html). For a Windows or Linux PC with a compatible NVIDIA GPU, their documented command is:
-
-```
-conda create -n decode_env -c turagalab -c pytorch -c conda-forge decode=0.10.2 cudatoolkit=11.3 jupyterlab ipykernel
-conda activate decode_env
-python -c "import decode, spline, torch; print('CUDA:', torch.cuda.is_available()); print('spline CUDA:', spline.cuda_is_available())"
-python -m ipykernel install --user --name decode_env --display-name "Python (DECODE)"
-```
-
-For CPU only, omit `cudatoolkit=11.3`. Installation and CUDA depend on the computer and driver; these commands have not been tested on the lab PC. A CUDA-enabled PyTorch installation alone does not guarantee spline CUDA support. Select `Python (DECODE)` in VS Code/Jupyter and open the notebooks. Training can be slow on CPU; `epochs = 2` is a smoke test, not a research model. If the Conda solver fails, keep the full error. DECODE's [official Colab notebooks](https://github.com/TuragaLab/DECODE#-getting-started) are another option.
-
-## Safety and interpretation
-
-Start with the example files and use a small subset. The `example_training.write_config` and `prediction.save_output` settings in `config.yaml` default to `false`. Training is started separately from a terminal so Windows multiprocessing is more reliable; training makes files in `decode_work`. Example camera settings describe an EMCCD, while the Nanoimager camera is sCMOS. Do not use example weights, PSF or background/camera settings as validated values for your experiment. DECODE predicts locations and uncertainty, not automatically verified ground truth. Validate with simulations and suitable real data, using appropriate registration/drift methods and checking border crops, orientation, units and frame indices. Output from the prediction notebook is in processed coordinates; the notebook does not automatically undo crops/mirroring or map between channels.
-
-The warm-start helper is written for the checked-out 0.10 implementation: it loads a state dict with strict architecture matching, starts a fresh optimizer, and does not resume a checkpoint. It must be tested with the version installed at the lab. Never overwrite the supplied model or the example files.
+The supplied example training defaults to two epochs (one is initial evaluation). This is only a workflow check. The save and training-config flags are off by default; original data and example weights are not overwritten. The custom fine-tuning helper uses DECODE internals. A tiny example run was tested, but results still require scientific validation.

@@ -30,6 +30,8 @@ example_training:
   epochs: 2                         # only one training epoch; not a trained research model
   training_samples: 128
   test_samples: 32
+  scheduler_step_size: 10             # StepLR schedule used by example demo
+  scheduler_gamma: 0.9
   warmstart_learning_rate: 0.0001  # example only; requires tuning
   write_config: false               # true creates YAML and prints terminal command
 
@@ -37,7 +39,8 @@ example_training:
 prediction:
   use_example: true                 # false requires own_data settings below
   first_frame: 0                    # zero-based
-  number_of_frames: 20
+  number_of_frames: 1
+  example_crop_size: 64             # square central example crop for a quick CPU demo
   device: auto
   workers: 0
   example_mirror: true              # example convention, not necessarily yours
