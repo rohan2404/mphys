@@ -17,17 +17,17 @@ PAGE = r'''<!doctype html>
 <html><head><meta charset="utf-8"><title>TIFF viewer</title><style>
 body{font:14px system-ui;background:#181a1e;color:#eee;margin:0} header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px;background:#292c32} select{max-width:50vw} button,input,select{font:inherit} main{display:flex;justify-content:center;align-items:center;height:calc(100vh - 125px);overflow:auto;background:#090a0c} img{max-width:100%;max-height:100%;image-rendering:pixelated} footer{padding:10px;display:flex;gap:10px;align-items:center} #frame{flex:1} #status{color:#bbb} label{white-space:nowrap} input[type=number]{width:75px}
 </style></head><body><header><select id="file"></select><button id="play">▶ Play</button><label>FPS <input id="fps" type="number" min="0.1" max="60" step="0.5" value="4"></label><label>Black <input id="low" type="number" value="0"></label><label>White <input id="high" type="number" value="65535"></label><button id="auto">Auto contrast</button><label>Min. net gradient <input id="gradient" type="number" min="0" step="100" value="3000"></label><button id="prepare">Prepare correction</button><select id="mode"><option value="raw">Raw</option><option value="localisations">Localisations (raw)</option><option value="registered">Registered</option><option value="corrected">Drift corrected</option><option value="overlay">Corrected overlay</option></select><span id="progress"></span><span id="status">Opening…</span></header><main><img id="image" draggable="false"></main><footer><button id="prev">◀</button><input id="frame" type="range" min="0" value="0"><button id="next">▶</button><span id="position"></span></footer><script>
-const $=id=>document.getElementById(id); let count=1, current=0, running=false, timer=null, busy=false, pending=false, generation=0;
+const $=id=>document.getElementById(id); let count=1, current=0, running=false, timer=null, busy=false, pending=false, generation=0, files=[];
 async function openFile(){running=false; $('play').textContent='▶ Play'; clearTimeout(timer); generation++; current=0; $('status').textContent='Opening…'; try {let r=await fetch('/info?file='+$('file').value); if(!r.ok) throw Error(await r.text()); let d=await r.json(); count=d.frames; $('frame').max=count-1; $('low').value=d.low; $('high').value=d.high; $('fps').value=d.fps||4; $('status').textContent=`${d.width} × ${d.height}, ${d.mode}; ${count} frames${d.expected && d.expected!==count ? ' (metadata says '+d.expected+')' : ''}`; show();}catch(e){$('status').textContent=e.message}}
 function show(){ $('frame').value=current; $('position').textContent=`${current+1} / ${count}`; pending=true; load() }
 async function load(){if(busy||!pending)return; pending=false; busy=true; const g=generation; const params=new URLSearchParams({file:$('file').value,frame:current,low:$('low').value,high:$('high').value,mode:$('mode').value,gradient:$('gradient').value}); try {let r=await fetch('/frame?'+params); if(!r.ok)throw Error(await r.text()); let blob=await r.blob(); if(g===generation&&!pending){let url=URL.createObjectURL(blob), old=$('image').dataset.url; $('image').src=url; $('image').dataset.url=url; if(old)URL.revokeObjectURL(old); if(params.get('mode')==='localisations') $('progress').textContent='Localisations: left '+r.headers.get('X-Left-Count')+', right '+r.headers.get('X-Right-Count')}}catch(e){if(g===generation)$('status').textContent=e.message} finally{busy=false;if(pending)load();else if(running)schedule()}}
 function schedule(){clearTimeout(timer); timer=setTimeout(()=>{if(running){current=(current+1)%count;show()}},1000/Math.max(.1,Number($('fps').value)||4))}
-$('mode').onchange=show; $('gradient').onchange=()=>{if($('mode').value==='localisations')show(); $('progress').textContent='Gradient changed; prepare correction again to use it'}; $('file').onchange=()=>{ $('mode').value='raw'; $('progress').textContent=''; openFile() };
-$('prepare').onclick=async()=>{let file=$('file').value; $('prepare').disabled=true; $('progress').textContent='Starting…'; try {let r=await fetch('/prepare?'+new URLSearchParams({file,gradient:$('gradient').value}),{method:'POST'}); let d=await r.json(); if(!r.ok)throw Error(d.error); while(true){await new Promise(resolve=>setTimeout(resolve,700)); let res=await fetch('/prepare?file='+file); let state=await res.json(); if(file===$('file').value) $('progress').textContent=state.message; if(state.state==='done'){if(file===$('file').value){$('mode').value='corrected';show()} break} if(state.state==='error')throw Error(state.message);}}catch(e){if(file===$('file').value)$('progress').textContent=e.message}finally{$('prepare').disabled=false}};
+$('mode').onchange=show; $('gradient').onchange=()=>{if($('mode').value==='localisations')show(); $('progress').textContent='Gradient changed; prepare correction again to use it'}; $('file').onchange=()=>{ $('mode').value='raw'; const preprocessed=files[Number($('file').value)].preprocessed; $('mode').disabled=preprocessed; $('prepare').disabled=preprocessed; $('gradient').disabled=preprocessed; $('progress').textContent=preprocessed?'Preprocessed data (display only)':''; openFile() };
+$('prepare').onclick=async()=>{let file=$('file').value; $('prepare').disabled=true; $('progress').textContent='Starting…'; try {let r=await fetch('/prepare?'+new URLSearchParams({file,gradient:$('gradient').value}),{method:'POST'}); let d=await r.json(); if(!r.ok)throw Error(d.error); while(true){await new Promise(resolve=>setTimeout(resolve,700)); let res=await fetch('/prepare?file='+file); let state=await res.json(); if(file===$('file').value) $('progress').textContent=state.message; if(state.state==='done'){if(file===$('file').value){$('mode').value='corrected';show()} break} if(state.state==='error')throw Error(state.message);}}catch(e){if(file===$('file').value)$('progress').textContent=e.message}finally{$('prepare').disabled=files[Number($('file').value)].preprocessed}};
  $('frame').oninput=e=>{current=Number(e.target.value);show()}; $('prev').onclick=()=>{current=Math.max(0,current-1);show()}; $('next').onclick=()=>{current=Math.min(count-1,current+1);show()}; $('play').onclick=()=>{running=!running;$('play').textContent=running?'❚❚ Pause':'▶ Play';if(running&&!busy)schedule();else if(!running)clearTimeout(timer)}; for(const id of ['low','high']) $(id).onchange=show;
 $('auto').onclick=async()=>{let r=await fetch('/contrast?file='+$('file').value+'&frame='+current);if(r.ok){let d=await r.json();$('low').value=d.low;$('high').value=d.high;show()}};
 window.onkeydown=e=>{if(['INPUT','SELECT'].includes(document.activeElement.tagName))return;if(e.key==='ArrowLeft')$('prev').click();if(e.key==='ArrowRight')$('next').click();if(e.key===' '){e.preventDefault();$('play').click()}};
-fetch('/files').then(r=>r.json()).then(files=>{files.forEach((name,i)=>{let o=document.createElement('option');o.value=i;o.textContent=name;$('file').appendChild(o)});openFile()});
+fetch('/files').then(r=>r.json()).then(data=>{files=data; files.forEach((file,i)=>{let o=document.createElement('option');o.value=i;o.textContent=file.name+(file.preprocessed?' [preprocessed]':'');$('file').appendChild(o)});$('file').onchange()});
 </script></body></html>'''
 
 def preprocess_frame(frame, homography, drift_xy=(0.0, 0.0)):
@@ -181,19 +181,21 @@ def contrast(frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('path', nargs='?', type=Path, help='TIFF file or directory (default: both example folders)')
+    parser.add_argument('path', nargs='?', type=Path, help='TIFF file or directory (default: data example folders and preprocessed_data)')
     parser.add_argument('--port', type=int, default=0, help='Local port (default: choose automatically)')
     parser.add_argument('--no-browser', action='store_true')
     args = parser.parse_args()
     if args.path is None:
-        root = Path(__file__).parent
-        paths = [p for folder in ('low_density_examples', 'high_density_examples')
-                 for p in sorted((root / folder).glob('*'))
+        root = Path(__file__).resolve().parent
+        paths = [p for folder in ('low_density_examples', 'high_density_examples', 'preprocessed_data')
+                 for p in sorted((root / 'data' / folder).glob('*'))
                  if p.is_file() and p.suffix.lower() in ('.tif', '.tiff')]
     else:
         paths = sorted(p for p in args.path.iterdir() if p.is_file() and p.suffix.lower() in ('.tif', '.tiff')) if args.path.is_dir() else [args.path]
     if not paths or any(not p.is_file() for p in paths):
         parser.error('No TIFF files found')
+    preprocessed_dir = (Path(__file__).resolve().parent / 'data' / 'preprocessed_data').resolve()
+    preprocessed = [preprocessed_dir in p.resolve().parents for p in paths]
     stack = Stack(paths)
     jobs = {}
     jobs_lock = threading.Lock()
@@ -223,6 +225,8 @@ def main():
                     raise ValueError('Min. net gradient must be a non-negative finite number')
                 if url.path != '/prepare' or not 0 <= index < len(paths):
                     raise ValueError('Invalid file or action')
+                if preprocessed[index]:
+                    raise ValueError('Preprocessed data is available for display only')
                 with jobs_lock:
                     if any(job['state'] == 'running' for job in jobs.values()):
                         raise ValueError('A correction is already being prepared')
@@ -242,7 +246,8 @@ def main():
                 if url.path == '/':
                     return self.respond(PAGE.encode(), 'text/html; charset=utf-8')
                 if url.path == '/files':
-                    return self.json([f'{p.parent.name}/{p.name}' for p in paths])
+                    return self.json([{'name': f'{p.parent.name}/{p.name}', 'preprocessed': preprocessed[i]}
+                                      for i, p in enumerate(paths)])
                 index = int(q['file'][0])
                 if url.path == '/prepare':
                     with jobs_lock:
@@ -266,6 +271,8 @@ def main():
                         return self.json(dict(low=low, high=high))
                     if url.path == '/frame':
                         mode = q.get('mode', ['raw'])[0]
+                        if preprocessed[index] and mode != 'raw':
+                            raise ValueError('Preprocessed data is available for display only')
                         if mode not in ('raw', 'localisations', 'registered', 'corrected', 'overlay'):
                             raise ValueError('Invalid display mode')
                         if mode not in ('raw', 'localisations'):

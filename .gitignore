@@ -1,6 +1,7 @@
 *.pyc
 high_density_examples/
 low_density_examples/
+data/
 *__pycache__/
 
 # Separate upstream checkout; keep it out of this repository.

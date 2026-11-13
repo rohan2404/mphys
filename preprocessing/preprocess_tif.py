@@ -9,7 +9,6 @@ import tifffile
 
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-import os
 
 def preprocess_frame(frame, homography, drift_xy=(0.0, 0.0)):
     """Return left and registered right frames, drift-corrected in left pixels.
@@ -34,12 +33,13 @@ def preprocess_frame(frame, homography, drift_xy=(0.0, 0.0)):
         right = shift(right, (-dy, -dx), mode='constant', cval=0.0)
     return left, right
 
-def _process_single_frame(raw, homography, drift_vec, need_copies):
-    """Worker function: transforms the frame and concatenates before returning."""
-    left, right = preprocess_frame(raw, homography, drift_vec)
-    combined = np.concatenate((left, right), axis=1)
-    # Only return `right` if the main thread needs it for plotting
-    return combined, (right.copy() if need_copies else None)
+def _register_right(right, homography):
+    """Apply the homography to one right-channel frame in a worker thread."""
+    import cv2
+
+    height, width = right.shape
+    return cv2.warpPerspective(right.astype(np.float32), homography, (width, height),
+                               flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
 
 
@@ -244,16 +244,18 @@ def preprocess_tif(input_path, output_path, *, plot_localisations=False,
             temporary_path = Path(tmp.name)
 
         max_workers = min(8, os.cpu_count() or 4)
-        # Bound in-flight frames so RAM usage stays strictly O(max_workers)
+        # Bound the number of frames held by the writer and workers.
         max_in_flight = max_workers * 2
         
         with Image.open(input_path) as movie, \
              tifffile.TiffWriter(temporary_path, bigtiff=True) as writer, \
              ThreadPoolExecutor(max_workers=max_workers) as executor:
+            from scipy.ndimage import shift
+
             n_frames = movie.n_frames #type: ignore
             homography = correction['homography']
             drifts = correction['drift']          
-            # FIFO queue holds tuples of (frame_index, future)
+            # Keep the left frame with its right-channel registration future.
             pending = deque()
             next_to_submit = 0
             def submit_frame(idx):
@@ -262,35 +264,38 @@ def preprocess_tif(input_path, output_path, *, plot_localisations=False,
                 if idx == 0 and (plot_localisations or plot_drift):
                     nonlocal first_raw
                     first_raw = raw
-                need_right = (
-                    (idx == 0 and (plot_localisations or plot_drift)) or
-                    (idx == n_frames - 1 and plot_drift)
-                )
-                fut = executor.submit(
-                    _process_single_frame, raw, homography, drifts[idx], need_right
-                )
-                pending.append((idx, fut))
+                if raw.ndim != 2 or raw.shape[1] % 2:
+                    raise ValueError('Expected a grayscale frame with two equal-width halves')
+                midpoint = raw.shape[1] // 2
+                fut = executor.submit(_register_right, raw[:, midpoint:].copy(), homography)
+                pending.append((idx, raw[:, :midpoint].copy(), fut))
             # 1. Prime the pipeline with the initial batch of frames
             while next_to_submit < min(max_in_flight, n_frames):
                 submit_frame(next_to_submit)
                 next_to_submit += 1
             # 2. Drain the oldest completed frame in strict order, then submit 1 new frame
             while pending:
-                index, fut = pending.popleft()
-                combined, right_copy = fut.result()  # Blocks until frame `index` is ready
+                index, left_raw, fut = pending.popleft()
+                right = fut.result()  # Wait for the oldest frame to preserve TIFF order.
                 if next_to_submit < n_frames:
                     submit_frame(next_to_submit)
                     next_to_submit += 1
+                left = left_raw.astype(np.float32)
+                dx, dy = drifts[index]
+                if dx or dy:
+                    left = shift(left, (-dy, -dx), mode='constant', cval=0.0)
+                    right = shift(right, (-dy, -dx), mode='constant', cval=0.0)
+                combined = np.concatenate((left, right), axis=1)
                 writer.write(
-                    np.clip(np.rint(combined), 0, 65535).astype(np.uint16),
+                    np.clip(np.rint(combined), 0, 65535),#.astype(np.uint16),
                     photometric='minisblack',
                     contiguous=True,
                     metadata=None
                 )
-                if index == 0 and right_copy is not None:
-                    first_right = right_copy
-                if index == n_frames - 1 and right_copy is not None:
-                    last_right = right_copy
+                if index == 0 and (plot_localisations or plot_drift):
+                    first_right = right
+                if index == n_frames - 1 and plot_drift:
+                    last_right = right
                 if (index + 1) % 100 == 0 or index + 1 == n_frames:
                     print(f'Writing corrected frames: {index + 1}/{n_frames}')
 
