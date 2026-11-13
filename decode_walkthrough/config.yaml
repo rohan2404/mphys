@@ -1,0 +1,82 @@
+# Walkthrough settings, NOT a DECODE training parameter file.
+# Paths are relative to the project root (the folder containing decode_walkthrough),
+# or may be absolute. Edit this file and rerun each notebook from its first cell.
+# DECODE's complete example model/camera/scaling settings remain in the example
+# param_run.yaml and frames_meta.yaml, which must match its model.
+paths:
+  example_folder: experimental_data_workflow
+  work_folder: decode_work
+  example_parameters: experimental_data_workflow/param_run.yaml
+  example_calibration: experimental_data_workflow/spline_calibration_3dcal.mat
+  example_movie: experimental_data_workflow/frames.tif
+  example_camera_metadata: experimental_data_workflow/frames_meta.yaml
+  example_model: experimental_data_workflow/model.pt
+  warmstart_helper: decode_walkthrough/finetune.py
+
+# These 40x40 simulations use the example's EMCCD camera/PSF, NOT yours.
+example_simulation:
+  device: cpu                       # 'cpu' or 'cuda:0' (spline must support CUDA)
+  emitter_average: 25               # per simulated 40x40 frame
+  background_photons: [20.0, 200.0] # spatially uniform; range sampled per frame
+  brightness_mean_std: [7000.0, 3000.0] # model photons, mean and standard deviation
+  last_frame_index: 7               # 0..7 inclusive
+  seed: 42
+
+# Short demonstration ONLY; these run on the example calibration and settings.
+example_training:
+  device: auto                      # auto, cpu, cuda:0; requires CUDA spline too
+  workers: 0                        # 0 avoids Windows multiprocessing issues
+  batch_size: 8
+  epochs: 2                         # only one training epoch; not a trained research model
+  training_samples: 128
+  test_samples: 32
+  warmstart_learning_rate: 0.0001  # example only; requires tuning
+  write_config: false               # true creates YAML and prints terminal command
+
+# Prediction uses the model AND its own param_run.yaml as a matched pair.
+prediction:
+  use_example: true                 # false requires own_data settings below
+  first_frame: 0                    # zero-based
+  number_of_frames: 20
+  device: auto
+  workers: 0
+  example_mirror: true              # example convention, not necessarily yours
+  threshold: 0.1                    # DECODE example notebook; validate for your task
+  save_output: false
+  output_file: decode_work/example_emitters.h5
+
+comparison:
+  frame_index: 0
+  # null = per-frame percentiles, or set numeric ADU values for consistent comparison
+  display_min_adu: null
+  display_max_adu: null
+  percentiles: [1, 99.9]
+
+# Placeholder metadata ONLY. It does not alter example training or a trained model.
+# Acquire the matching channel PSF, camera settings, orientation and models first.
+# The 117 nm value was observed in TWO low-density recordings; verify each dataset.
+own_data:
+  raw_tiff: null
+  channel: left                     # left or right
+  pixel_size_nm: null               # e.g. [117.0, 117.0] after verifying both axes
+  channels:
+    left:
+      calibration_file: null        # for future own-data training; not used automatically
+      model_file: null
+      model_parameters: null        # matching model's param_run.yaml
+      mirror: null                  # choose true/false after checking calibration orientation
+      camera:
+        baseline: null              # raw camera ADU offset
+        e_per_adu: null             # electrons/ADU
+        em_gain: null               # null is correct for sCMOS, not a missing value
+        spur_noise: null            # DECODE camera units; verify or justify assumption
+    right:
+      calibration_file: null
+      model_file: null
+      model_parameters: null
+      mirror: null
+      camera:
+        baseline: null
+        e_per_adu: null
+        em_gain: null
+        spur_noise: null

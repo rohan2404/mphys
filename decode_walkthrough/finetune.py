@@ -13,7 +13,14 @@ def main():
     args = parser.parse_args()
     weights = Path(args.weights).resolve(strict=True)
     import torch
-    import decode.neuralfitter.train.train as trainer
+    import importlib
+    try:
+        trainer = importlib.import_module("decode.neuralfitter.train.live_engine")  # release 0.10.2
+    except ModuleNotFoundError as exc:
+        if exc.name != "decode.neuralfitter.train.live_engine":
+            raise
+        trainer = importlib.import_module("decode.neuralfitter.train.train")  # development checkout
+    print("Training engine:", trainer.__file__, flush=True)
     original = trainer.setup_trainer
 
     def setup_with_weights(*positional, **keywords):
