@@ -9,7 +9,7 @@ Open these notebooks in VS Code and select **Python (DECODE Intel)** as the kern
 
 ## Changing settings
 
-Edit [config.yaml](config.yaml), save it, and rerun a notebook from its first cell. For example, set `own_data.raw_tiff` to a path to view another recording, or change `example_simulation.background_photons` and `emitter_average` to see their effect. Relative paths start at the project root (`mphys`).
+Notebook 1 has its movie path and simulation settings directly in its cells; edit them there and rerun the relevant cells. The other notebooks still use [config.yaml](config.yaml): edit it, save it, and rerun those notebooks from the first cell. Relative paths start at the project root (`mphys`).
 
 The example model, calibration and camera settings come from DECODE's bundled experiment. They are not measurements of your Nanoimager. The `own_data` entries for pixel size and calibration are notes; they do not automatically adapt the example training. For your own data you need a matching PSF, camera parameters, a suitable trained model and its parameter file. Check orientation, crop offsets, registration and drift before combining channels. The prediction notebook does not automatically map localisations back to the original two-channel frame.
 

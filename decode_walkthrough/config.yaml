@@ -59,7 +59,7 @@ comparison:
 # Acquire the matching channel PSF, camera settings, orientation and models first.
 # The 117 nm value was observed in TWO low-density recordings; verify each dataset.
 own_data:
-  raw_tiff: null
+  raw_tiff: "data/preprocessed_data/corrected.tif"
   channel: left                     # left or right
   pixel_size_nm: null               # e.g. [117.0, 117.0] after verifying both axes
   channels:
