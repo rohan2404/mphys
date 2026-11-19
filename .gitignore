@@ -3,7 +3,7 @@ high_density_examples/
 low_density_examples/
 data/
 *__pycache__/
-
+*.npy
 # Separate upstream checkout; keep it out of this repository.
 DECODE/
 experimental_data_workflow/

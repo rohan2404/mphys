@@ -1,0 +1,812 @@
+[
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "LowDensity_SealG_F3_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 140.18,
+    "full_std": 36.19,
+    "roi_mean": 165.17,
+    "roi_std": 13.05,
+    "masked_frac_pct": 26.01
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 200,
+    "end_frame": 250,
+    "center_frame": 225,
+    "filename": "LowDensity_SealG_F3_f0200_to_f0250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 157.97,
+    "full_std": 41.12,
+    "roi_mean": 186.47,
+    "roi_std": 14.77,
+    "masked_frac_pct": 27.56
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 400,
+    "end_frame": 450,
+    "center_frame": 425,
+    "filename": "LowDensity_SealG_F3_f0400_to_f0450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 167.9,
+    "full_std": 44.02,
+    "roi_mean": 198.3,
+    "roi_std": 15.94,
+    "masked_frac_pct": 27.17
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 600,
+    "end_frame": 650,
+    "center_frame": 625,
+    "filename": "LowDensity_SealG_F3_f0600_to_f0650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 169.98,
+    "full_std": 44.57,
+    "roi_mean": 200.7,
+    "roi_std": 16.26,
+    "masked_frac_pct": 27.75
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 800,
+    "end_frame": 850,
+    "center_frame": 825,
+    "filename": "LowDensity_SealG_F3_f0800_to_f0850.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 171.52,
+    "full_std": 45.02,
+    "roi_mean": 202.57,
+    "roi_std": 16.45,
+    "masked_frac_pct": 27.35
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 1000,
+    "end_frame": 1050,
+    "center_frame": 1025,
+    "filename": "LowDensity_SealG_F3_f1000_to_f1050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 176.72,
+    "full_std": 46.56,
+    "roi_mean": 208.64,
+    "roi_std": 17.05,
+    "masked_frac_pct": 27.74
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 1200,
+    "end_frame": 1250,
+    "center_frame": 1225,
+    "filename": "LowDensity_SealG_F3_f1200_to_f1250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 174.76,
+    "full_std": 45.74,
+    "roi_mean": 206.31,
+    "roi_std": 16.54,
+    "masked_frac_pct": 27.1
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 1400,
+    "end_frame": 1450,
+    "center_frame": 1425,
+    "filename": "LowDensity_SealG_F3_f1400_to_f1450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 176.96,
+    "full_std": 46.29,
+    "roi_mean": 208.94,
+    "roi_std": 16.79,
+    "masked_frac_pct": 27.57
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 1600,
+    "end_frame": 1650,
+    "center_frame": 1625,
+    "filename": "LowDensity_SealG_F3_f1600_to_f1650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 180.74,
+    "full_std": 47.27,
+    "roi_mean": 213.47,
+    "roi_std": 17.06,
+    "masked_frac_pct": 26.73
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3_1",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "LowDensity_SealG_F3_1_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 184.7,
+    "full_std": 48.36,
+    "roi_mean": 218.19,
+    "roi_std": 17.39,
+    "masked_frac_pct": 25.77
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3_1",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 60,
+    "end_frame": 110,
+    "center_frame": 85,
+    "filename": "LowDensity_SealG_F3_1_f0060_to_f0110.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 185.73,
+    "full_std": 48.59,
+    "roi_mean": 219.4,
+    "roi_std": 17.54,
+    "masked_frac_pct": 25.3
+  },
+  {
+    "dataset_id": "LowDensity_SealG_F3_1",
+    "density": "low",
+    "seal": "SealG",
+    "start_frame": 120,
+    "end_frame": 170,
+    "center_frame": 145,
+    "filename": "LowDensity_SealG_F3_1_f0120_to_f0170.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 186.56,
+    "full_std": 48.88,
+    "roi_mean": 220.48,
+    "roi_std": 17.77,
+    "masked_frac_pct": 24.91
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "LowDensity_SealA_F3_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 45.66,
+    "full_std": 11.2,
+    "roi_mean": 53.63,
+    "roi_std": 3.77,
+    "masked_frac_pct": 35.35
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 200,
+    "end_frame": 250,
+    "center_frame": 225,
+    "filename": "LowDensity_SealA_F3_f0200_to_f0250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 53.84,
+    "full_std": 13.23,
+    "roi_mean": 63.21,
+    "roi_std": 4.41,
+    "masked_frac_pct": 35.7
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 400,
+    "end_frame": 450,
+    "center_frame": 425,
+    "filename": "LowDensity_SealA_F3_f0400_to_f0450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 59.55,
+    "full_std": 14.83,
+    "roi_mean": 70.04,
+    "roi_std": 4.94,
+    "masked_frac_pct": 33.44
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 600,
+    "end_frame": 650,
+    "center_frame": 625,
+    "filename": "LowDensity_SealA_F3_f0600_to_f0650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 58.28,
+    "full_std": 14.54,
+    "roi_mean": 68.53,
+    "roi_std": 4.84,
+    "masked_frac_pct": 32.56
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 800,
+    "end_frame": 850,
+    "center_frame": 825,
+    "filename": "LowDensity_SealA_F3_f0800_to_f0850.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 55.66,
+    "full_std": 13.8,
+    "roi_mean": 65.41,
+    "roi_std": 4.61,
+    "masked_frac_pct": 31.7
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 1000,
+    "end_frame": 1050,
+    "center_frame": 1025,
+    "filename": "LowDensity_SealA_F3_f1000_to_f1050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 53.85,
+    "full_std": 13.3,
+    "roi_mean": 63.29,
+    "roi_std": 4.4,
+    "masked_frac_pct": 33.12
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 1200,
+    "end_frame": 1250,
+    "center_frame": 1225,
+    "filename": "LowDensity_SealA_F3_f1200_to_f1250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 53.23,
+    "full_std": 13.17,
+    "roi_mean": 62.63,
+    "roi_std": 4.34,
+    "masked_frac_pct": 32.46
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 1400,
+    "end_frame": 1450,
+    "center_frame": 1425,
+    "filename": "LowDensity_SealA_F3_f1400_to_f1450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 53.94,
+    "full_std": 13.27,
+    "roi_mean": 63.37,
+    "roi_std": 4.35,
+    "masked_frac_pct": 32.79
+  },
+  {
+    "dataset_id": "LowDensity_SealA_F3",
+    "density": "low",
+    "seal": "SealA",
+    "start_frame": 1600,
+    "end_frame": 1650,
+    "center_frame": 1625,
+    "filename": "LowDensity_SealA_F3_f1600_to_f1650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 54.41,
+    "full_std": 13.44,
+    "roi_mean": 63.99,
+    "roi_std": 4.41,
+    "masked_frac_pct": 32.18
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "HighDensity_SealG_F8_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 89.16,
+    "full_std": 22.97,
+    "roi_mean": 104.61,
+    "roi_std": 8.38,
+    "masked_frac_pct": 38.87
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 200,
+    "end_frame": 250,
+    "center_frame": 225,
+    "filename": "HighDensity_SealG_F8_f0200_to_f0250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 100.17,
+    "full_std": 25.41,
+    "roi_mean": 117.59,
+    "roi_std": 9.01,
+    "masked_frac_pct": 36.38
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 400,
+    "end_frame": 450,
+    "center_frame": 425,
+    "filename": "HighDensity_SealG_F8_f0400_to_f0450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 133.46,
+    "full_std": 34.57,
+    "roi_mean": 156.98,
+    "roi_std": 12.47,
+    "masked_frac_pct": 38.37
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 600,
+    "end_frame": 650,
+    "center_frame": 625,
+    "filename": "HighDensity_SealG_F8_f0600_to_f0650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 151.79,
+    "full_std": 39.9,
+    "roi_mean": 178.65,
+    "roi_std": 14.61,
+    "masked_frac_pct": 37.94
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 800,
+    "end_frame": 850,
+    "center_frame": 825,
+    "filename": "HighDensity_SealG_F8_f0800_to_f0850.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 147.11,
+    "full_std": 38.7,
+    "roi_mean": 173.11,
+    "roi_std": 14.11,
+    "masked_frac_pct": 39.23
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 1000,
+    "end_frame": 1050,
+    "center_frame": 1025,
+    "filename": "HighDensity_SealG_F8_f1000_to_f1050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 134.88,
+    "full_std": 35.27,
+    "roi_mean": 158.51,
+    "roi_std": 12.86,
+    "masked_frac_pct": 38.71
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 1200,
+    "end_frame": 1250,
+    "center_frame": 1225,
+    "filename": "HighDensity_SealG_F8_f1200_to_f1250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 124.55,
+    "full_std": 32.46,
+    "roi_mean": 146.41,
+    "roi_std": 11.79,
+    "masked_frac_pct": 36.52
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 1400,
+    "end_frame": 1450,
+    "center_frame": 1425,
+    "filename": "HighDensity_SealG_F8_f1400_to_f1450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 120.41,
+    "full_std": 31.19,
+    "roi_mean": 141.47,
+    "roi_std": 11.18,
+    "masked_frac_pct": 36.57
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 1600,
+    "end_frame": 1650,
+    "center_frame": 1625,
+    "filename": "HighDensity_SealG_F8_f1600_to_f1650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 122.17,
+    "full_std": 31.56,
+    "roi_mean": 143.57,
+    "roi_std": 11.33,
+    "masked_frac_pct": 35.9
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8_1",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "HighDensity_SealG_F8_1_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 126.77,
+    "full_std": 32.81,
+    "roi_mean": 149.03,
+    "roi_std": 11.72,
+    "masked_frac_pct": 34.52
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8_1",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 60,
+    "end_frame": 110,
+    "center_frame": 85,
+    "filename": "HighDensity_SealG_F8_1_f0060_to_f0110.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 128.02,
+    "full_std": 33.17,
+    "roi_mean": 150.46,
+    "roi_std": 11.96,
+    "masked_frac_pct": 34.09
+  },
+  {
+    "dataset_id": "HighDensity_SealG_F8_1",
+    "density": "high",
+    "seal": "SealG",
+    "start_frame": 120,
+    "end_frame": 170,
+    "center_frame": 145,
+    "filename": "HighDensity_SealG_F8_1_f0120_to_f0170.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 128.65,
+    "full_std": 33.34,
+    "roi_mean": 151.22,
+    "roi_std": 12.05,
+    "masked_frac_pct": 33.8
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "HighDensity_SealA_F8_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 30.28,
+    "full_std": 7.45,
+    "roi_mean": 35.45,
+    "roi_std": 2.77,
+    "masked_frac_pct": 65.27
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 200,
+    "end_frame": 250,
+    "center_frame": 225,
+    "filename": "HighDensity_SealA_F8_f0200_to_f0250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 36.36,
+    "full_std": 8.92,
+    "roi_mean": 42.59,
+    "roi_std": 3.18,
+    "masked_frac_pct": 62.7
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 400,
+    "end_frame": 450,
+    "center_frame": 425,
+    "filename": "HighDensity_SealA_F8_f0400_to_f0450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.46,
+    "full_std": 9.44,
+    "roi_mean": 44.99,
+    "roi_std": 3.46,
+    "masked_frac_pct": 61.05
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 600,
+    "end_frame": 650,
+    "center_frame": 625,
+    "filename": "HighDensity_SealA_F8_f0600_to_f0650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.9,
+    "full_std": 9.52,
+    "roi_mean": 45.55,
+    "roi_std": 3.43,
+    "masked_frac_pct": 59.58
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 800,
+    "end_frame": 850,
+    "center_frame": 825,
+    "filename": "HighDensity_SealA_F8_f0800_to_f0850.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.74,
+    "full_std": 9.5,
+    "roi_mean": 45.34,
+    "roi_std": 3.39,
+    "masked_frac_pct": 58.97
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 1000,
+    "end_frame": 1050,
+    "center_frame": 1025,
+    "filename": "HighDensity_SealA_F8_f1000_to_f1050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.57,
+    "full_std": 9.36,
+    "roi_mean": 45.17,
+    "roi_std": 3.19,
+    "masked_frac_pct": 57.49
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 1200,
+    "end_frame": 1250,
+    "center_frame": 1225,
+    "filename": "HighDensity_SealA_F8_f1200_to_f1250.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.48,
+    "full_std": 9.34,
+    "roi_mean": 45.01,
+    "roi_std": 3.29,
+    "masked_frac_pct": 55.92
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 1400,
+    "end_frame": 1450,
+    "center_frame": 1425,
+    "filename": "HighDensity_SealA_F8_f1400_to_f1450.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.54,
+    "full_std": 9.4,
+    "roi_mean": 45.16,
+    "roi_std": 3.32,
+    "masked_frac_pct": 55.56
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 1600,
+    "end_frame": 1650,
+    "center_frame": 1625,
+    "filename": "HighDensity_SealA_F8_f1600_to_f1650.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.63,
+    "full_std": 9.43,
+    "roi_mean": 45.26,
+    "roi_std": 3.36,
+    "masked_frac_pct": 56.18
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8_1",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 0,
+    "end_frame": 50,
+    "center_frame": 25,
+    "filename": "HighDensity_SealA_F8_1_f0000_to_f0050.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.73,
+    "full_std": 9.41,
+    "roi_mean": 45.32,
+    "roi_std": 3.32,
+    "masked_frac_pct": 53.67
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8_1",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 60,
+    "end_frame": 110,
+    "center_frame": 85,
+    "filename": "HighDensity_SealA_F8_1_f0060_to_f0110.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.68,
+    "full_std": 9.37,
+    "roi_mean": 45.21,
+    "roi_std": 3.3,
+    "masked_frac_pct": 53.01
+  },
+  {
+    "dataset_id": "HighDensity_SealA_F8_1",
+    "density": "high",
+    "seal": "SealA",
+    "start_frame": 120,
+    "end_frame": 170,
+    "center_frame": 145,
+    "filename": "HighDensity_SealA_F8_1_f0120_to_f0170.npy",
+    "shape": [
+      684,
+      428
+    ],
+    "full_mean": 38.71,
+    "full_std": 9.39,
+    "roi_mean": 45.29,
+    "roi_std": 3.33,
+    "masked_frac_pct": 52.37
+  }
+]
