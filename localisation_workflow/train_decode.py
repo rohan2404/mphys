@@ -276,7 +276,7 @@ def parse_args():
     parser.add_argument('--vae-ckpt', type=str, default='localisation_workflow/vae_background/bg_vae_64x64.pt')
     parser.add_argument('--manifest', type=str, default='localisation_workflow/vae_background/noise_maps/manifest.json')
     parser.add_argument('--cal-rel', type=str, default='data/bead_calibration/Beadzstack_3DLens_3dcal.mat')
-    parser.add_argument('--param-rel', type=str, default='experimental_data_workflow/param_run.yaml')
+    parser.add_argument('--param-rel', type=str, default='localisation_workflow/param_run.yaml')
 
     parser.add_argument('--device', type=str, default='auto', help="auto, cpu, cuda, cuda:0, ...")
     parser.add_argument('--num-workers', type=int, default=0, help='DataLoader workers (use 4 on Linux GPU cluster, 0 on macOS)')

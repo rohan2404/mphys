@@ -44,7 +44,7 @@ Keep the repository folder structure intact (or copy these 5 files with their re
 2. `localisation_workflow/vae_background/bg_vae_64x64.pt` — trained Conv-$\beta$-VAE background weights
 3. `localisation_workflow/vae_background/noise_maps/manifest.json` — empirical $(\mu_{\mathrm{ROI}}, \sigma_{\mathrm{ROI}})$ photon scaling distribution
 4. `data/bead_calibration/Beadzstack_3DLens_3dcal.mat` — calibrated 3D cubic spline PSF
-5. `experimental_data_workflow/param_run.yaml` — base DECODE architecture/loss template
+5. `localisation_workflow/param_run.yaml` — your ONI Nanoimager DECODE configuration
 
 *(You do **not** need to copy the raw multi-GB `.tif` movies or the individual `.npy` noise maps to train DECODE, since `VAEBackground` generates backgrounds purely from `bg_vae_64x64.pt` + `manifest.json`.)*
 

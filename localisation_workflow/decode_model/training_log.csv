@@ -1,2 +1,2 @@
 epoch,lr,train_loss,val_loss,jaccard,precision,recall,rmse_lat_nm,rmse_ax_nm,epoch_sec
-1,6.000000e-04,59968.687500,26295.500000,0.0000,0.0000,0.0000,nan,nan,18.35
+1,6.000000e-04,62300.160156,23166.458984,0.0000,0.0000,0.0000,nan,nan,17.57
