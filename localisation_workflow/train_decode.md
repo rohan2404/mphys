@@ -8,19 +8,15 @@ This guide explains how to set up the Conda environment and run [`train_decode.p
 
 `decode==0.10.2` requires **Python 3.8** and **PyTorch 1.12** (along with the compiled `spline` PSF package from `turagalab`).
 
-### Option A: Linux / Windows GPU Cluster (CUDA)
+### Option A: Linux / Windows GPU Workstation or Cluster (CUDA — Recommended `pip`-First Setup)
 ```bash
 conda create -n decode_gpu python=3.8.20 -y
 conda activate decode_gpu
 
-# Install PyTorch 1.12 with CUDA (adjust cudatoolkit version to match your cluster GPU driver, e.g. 11.3 or 11.6)
-conda install pytorch=1.12.1 torchvision cudatoolkit=11.3 -c pytorch -c conda-forge -y
+pip install torch==1.12.0+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
+pip install numpy==1.19.5 scipy==1.8.0 pyyaml tqdm tifffile pandas scikit-image scikit-learn matplotlib seaborn h5py deprecated gitpython tensorboard requests
 
-# Install DECODE 0.10.2 + compiled 3D spline library
-conda install decode=0.10.2 spline -c turagalab -c conda-forge -y
-
-# Supporting scientific packages
-conda install numpy=1.19.5 scipy=1.8.0 pyyaml tqdm -y
+conda install -c turagalab decode=0.10.2 spline=0.10.0 --no-deps -y
 ```
 
 ### Option B: CPU-Only (Local / Mac)
@@ -28,9 +24,10 @@ conda install numpy=1.19.5 scipy=1.8.0 pyyaml tqdm -y
 conda create -n decode_cpu python=3.8.20 -y
 conda activate decode_cpu
 
-conda install pytorch=1.12.0 cpuonly -c pytorch -c conda-forge -y
-conda install decode=0.10.2 spline -c turagalab -c conda-forge -y
-conda install numpy=1.19.5 scipy=1.8.0 pyyaml tqdm -y
+pip install torch==1.12.0
+pip install numpy==1.19.5 scipy==1.8.0 pyyaml tqdm tifffile pandas scikit-image scikit-learn matplotlib seaborn h5py deprecated gitpython tensorboard requests
+
+conda install -c turagalab decode=0.10.2 spline=0.10.0 --no-deps -y
 ```
 
 *(Verified local environment versions: `python 3.8.20`, `torch 1.12.0.post2`, `decode 0.10.2`, `numpy 1.19.5`, `scipy 1.8.0`.)*
