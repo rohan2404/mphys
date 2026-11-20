@@ -1,9 +1,12 @@
 *.pyc
 high_density_examples/
 low_density_examples/
-data/
+data/*
+!data/bead_calibration/
+data/bead_calibration/*
+!data/bead_calibration/Beadzstack_3DLens_3dcal.mat
 *__pycache__/
-*.npy
+noise_maps/
 # Separate upstream checkout; keep it out of this repository.
 DECODE/
 experimental_data_workflow/
