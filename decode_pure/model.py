@@ -249,6 +249,7 @@ class SigmaMUNet(nn.Module):
         upsample_mode: str = "nearest",
         skip_gn_level: Union[None, bool] = None,
         activation=nn.ReLU(),
+        init_custom: bool = True,
     ):
         super().__init__()
         assert ch_in in (1, 3), "ch_in must be 1 or 3"
@@ -270,7 +271,7 @@ class SigmaMUNet(nn.Module):
             in_channels=inter_features * ch_in,
             out_channels=inter_features,
             depth=depth_union,
-            initial_features=inter_features,
+            initial_features=initial_features,
             pad_convs=True,
             norm=norm,
             norm_groups=norm_groups,
@@ -297,6 +298,14 @@ class SigmaMUNet(nn.Module):
             "sigma_eps",
             nn.Parameter(torch.tensor([self.sigma_eps_default]), requires_grad=False),
         )
+        if init_custom:
+            for module in self.modules():
+                if isinstance(module, nn.Conv2d):
+                    nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+            detection_conv = next(m for m in self.mt_heads[0].core if isinstance(m, nn.Conv2d))
+            nn.init.kaiming_normal_(detection_conv.weight, mode="fan_in", nonlinearity="relu")
+            nn.init.kaiming_normal_(self.mt_heads[0].out_conv.weight, mode="fan_in", nonlinearity="linear")
+            nn.init.constant_(self.mt_heads[0].out_conv.bias, -6.0)
 
     def _forward_core(self, x: torch.Tensor) -> torch.Tensor:
         if self.ch_in == 3:
@@ -310,21 +319,20 @@ class SigmaMUNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self._forward_core(x)
-        out = torch.cat([head(h) for head in self.mt_heads], dim=1)
-        out[:, [0]] = torch.clamp(out[:, [0]], min=-8.0, max=8.0)
-        out[:, self.sigmoid_ch_ix] = torch.sigmoid(out[:, self.sigmoid_ch_ix])
-        out[:, self.tanh_ch_ix] = torch.tanh(out[:, self.tanh_ch_ix])
-        out[:, self.pxyz_sig_ch_ix] = out[:, self.pxyz_sig_ch_ix] * 3.0 + self.sigma_eps
-        return out
+        raw = torch.cat([head(h) for head in self.mt_heads], dim=1)
+        p = torch.sigmoid(torch.clamp(raw[:, 0:1], min=-8.0, max=8.0))
+        phot = torch.sigmoid(raw[:, 1:2])
+        xyz = torch.tanh(raw[:, 2:5])
+        sig = torch.sigmoid(raw[:, 5:9]) * 3.0 + self.sigma_eps
+        bg = torch.sigmoid(raw[:, 9:10])
+        return torch.cat([p, phot, xyz, sig, bg], dim=1)
 
 
-def load_sigma_munet(param_yaml: Union[str, Path], weights_pt: Union[str, Path], device: str = "cpu"):
-    """Load trained model_best.pt + param_run_used.yaml in pure PyTorch with strict=True."""
-    param = yaml.safe_load(Path(param_yaml).read_text())
+def model_from_params(param):
     hp = param["HyperParameter"]
     ap = hp["arch_param"]
     act = _get_activation(ap.get("activation", "ReLU"))
-    model = SigmaMUNet(
+    return SigmaMUNet(
         ch_in=int(hp["channels_in"]),
         depth_shared=int(ap["depth_shared"]),
         depth_union=int(ap["depth_union"]),
@@ -338,7 +346,14 @@ def load_sigma_munet(param_yaml: Union[str, Path], weights_pt: Union[str, Path],
         upsample_mode=ap.get("upsample_mode", "nearest"),
         skip_gn_level=ap.get("skip_gn_level"),
         activation=act,
-    ).to(device)
+        init_custom=ap.get("init_custom", True),
+    )
+
+
+def load_sigma_munet(param_yaml: Union[str, Path], weights_pt: Union[str, Path], device: str = "cpu"):
+    """Load trained model_best.pt + param_run_used.yaml in pure PyTorch with strict=True."""
+    param = yaml.safe_load(Path(param_yaml).read_text())
+    model = model_from_params(param).to(device)
     try:
         state = torch.load(str(weights_pt), map_location=device, weights_only=False)
     except TypeError:
@@ -348,3 +363,13 @@ def load_sigma_munet(param_yaml: Union[str, Path], weights_pt: Union[str, Path],
     model.load_state_dict(state, strict=True)
     model.eval()
     return model, param
+
+
+def resolve_infer_device(device_arg: str) -> str:
+    if device_arg == "auto":
+        if torch.cuda.is_available():
+            return "cuda:0"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    return device_arg

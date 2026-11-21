@@ -3,7 +3,7 @@ Pure-PyTorch DECODE Inference + SpatialIntegration NMS Post-Processing.
 Works on CPU, CUDA, and Apple Silicon MPS with zero dependency on `decode` or `spline`.
 
 Usage:
-  python -m localisation_workflow.decode_pure.infer \
+  python -m decode_pure.infer \
     --movie data/low_density_examples/RegistrationCheck_LowDensity_GapT_Exp1_GapT_SealG_F3.tif \
     --weights localisation_workflow/decode_model/model_best.pt \
     --param localisation_workflow/decode_model/param_run_used.yaml \
@@ -20,7 +20,8 @@ import tifffile
 import torch
 import torch.nn.functional as F
 
-from .model import load_sigma_munet
+from .model import load_sigma_munet, resolve_infer_device
+from .simulator import CameraNoisePure
 
 
 def decode_nms_postprocess(
@@ -30,13 +31,15 @@ def decode_nms_postprocess(
     phot_max: float = 6000.0,
     z_max: float = 250.0,
     px_size: tuple = (117.0, 117.0),
+    bg_max: float = 260.0,
+    xy_origin: tuple = (0.0, 0.0),
 ):
     """
     Exact pure-PyTorch mirror of decode.neuralfitter.post_processing.SpatialIntegration (norm_sum)
     + ParameterListRescale inverse scaling.
 
     Returns dict of 1D numpy arrays:
-      frame_ix, x_px, y_px, x_nm, y_nm, z_nm, phot, prob, sigma_x_nm, sigma_y_nm, sigma_z_nm, sigma_phot
+      frame_ix, x_px, y_px, x_nm, y_nm, z_nm, phot, prob, sigma_x_nm, sigma_y_nm, sigma_z_nm, sigma_phot, bg
     """
     with torch.no_grad():
         p = y_out[:, 0].clone()
@@ -64,7 +67,7 @@ def decode_nms_postprocess(
             empty = np.zeros((0,), dtype=np.float32)
             out_dict = {k: empty.copy() for k in [
                 "x_px", "y_px", "x_nm", "y_nm", "z_nm", "phot", "prob",
-                "sigma_x_nm", "sigma_y_nm", "sigma_z_nm", "sigma_phot",
+                "sigma_x_nm", "sigma_y_nm", "sigma_z_nm", "sigma_phot", "bg",
             ]}
             out_dict["frame_ix"] = np.zeros((0,), dtype=np.int64)
             return out_dict
@@ -77,8 +80,8 @@ def decode_nms_postprocess(
         feat = y_out.permute(1, 0, 2, 3)[:, active].cpu()  # (10, M)
 
         phot = (feat[1] * phot_max).numpy().astype(np.float32)
-        x_px = (row.cpu() + feat[2]).numpy().astype(np.float32)
-        y_px = (col.cpu() + feat[3]).numpy().astype(np.float32)
+        x_px = ((row.cpu() + xy_origin[0]) + feat[2]).numpy().astype(np.float32)
+        y_px = ((col.cpu() + xy_origin[1]) + feat[3]).numpy().astype(np.float32)
         z_nm = (feat[4] * z_max).numpy().astype(np.float32)
 
         sigma_phot = (feat[5] * phot_max).numpy().astype(np.float32)
@@ -99,17 +102,8 @@ def decode_nms_postprocess(
             "sigma_y_nm": sigma_y_nm,
             "sigma_z_nm": sigma_z_nm,
             "sigma_phot": sigma_phot,
+            "bg": (feat[9] * bg_max).numpy(),
         }
-
-
-def resolve_infer_device(device_arg: str) -> str:
-    if device_arg == "auto":
-        if torch.cuda.is_available():
-            return "cuda:0"
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return "mps"
-        return "cpu"
-    return device_arg
 
 
 def infer_movie(
@@ -132,54 +126,48 @@ def infer_movie(
     if raw_th is None:
         raw_th = float(param.get("PostProcessingParam", {}).get("raw_th", 0.5))
 
-    baseline = float(cam["baseline"])
-    conv_factor = float(cam["e_per_adu"]) / float(cam["qe"])
+    camera = CameraNoisePure(**{k: v for k, v in cam.items() if k != "px_size"})
+    xy_origin = tuple(axis[0] + 0.5 for axis in param["TestSet"]["frame_extent"][:2])
     offset = float(sc["input_offset"])
     scale = float(sc["input_scale"])
     phot_max = float(sc["phot_max"])
     z_max = float(sc["z_max"])
     px_size = tuple(float(v) for v in cam["px_size"])
 
-    with tifffile.TiffFile(str(movie_path)) as tif:
-        n_frames = len(tif.pages)
-        stack_adu = np.stack([p.asarray() for p in tif.pages]).astype(np.float32)
-
-    if right_channel_only:
-        mid_w = stack_adu.shape[2] // 2
-        stack_adu = stack_adu[:, :, mid_w:]
-
-    # Pad H, W to multiples of 2**max_depth so StrideConv aligns cleanly on any FOV
     ap = param["HyperParameter"]["arch_param"]
-    stride = 2 ** max(int(ap.get("depth_shared", 2)), int(ap.get("depth_union", 2)))
-    _, H, W = stack_adu.shape
-    pad_h = (stride - H % stride) % stride
-    pad_w = (stride - W % stride) % stride
-
-    stack_phot = (stack_adu - baseline) * conv_factor
-    stack_norm = (stack_phot - offset) / scale
-
-    half_w = ch_in // 2
-    valid_frames = list(range(half_w, n_frames - half_w))
+    stride = 2 ** max(int(ap["depth_shared"]), int(ap["depth_union"]))
     all_chunks = {k: [] for k in [
         "frame_ix", "x_px", "y_px", "x_nm", "y_nm", "z_nm", "phot", "prob",
-        "sigma_x_nm", "sigma_y_nm", "sigma_z_nm", "sigma_phot",
+        "sigma_x_nm", "sigma_y_nm", "sigma_z_nm", "sigma_phot", "bg",
     ]}
 
-    with torch.no_grad():
-        for i in range(0, len(valid_frames), batch_size):
-            batch_f = valid_frames[i : i + batch_size]
-            if ch_in == 3:
-                x_np = np.stack([stack_norm[f - 1 : f + 2] for f in batch_f], axis=0)
-            else:
-                x_np = stack_norm[batch_f][:, None, :, :]
-            x_t = torch.from_numpy(x_np).to(dev)
+    if batch_size < 1:
+        raise ValueError("batch_size must be positive")
+    with tifffile.TiffFile(str(movie_path)) as tif, torch.no_grad():
+        n_frames = len(tif.pages)
+        height, width = tif.pages[0].shape
+        x_start = width // 2 if right_channel_only else 0
+        H, W = height, width - x_start
+        pad_h, pad_w = -H % stride, -W % stride
+        for start in range(0, n_frames, batch_size):
+            batch_f = np.arange(start, min(start + batch_size, n_frames))
+            # InferenceDataset repeats the nearest frame at both movie ends.
+            windows = np.clip(batch_f[:, None] + np.arange(ch_in) - ch_in // 2, 0, n_frames - 1)
+            first, last = int(windows.min()), int(windows.max())
+            pages = np.stack([tif.pages[f].asarray()[:, x_start:] for f in range(first, last + 1)])
+            frames = torch.as_tensor(pages.astype(np.float32), device=dev)
+            if camera.convert2photons:
+                frames = camera.backward(frames)
+            frames = (frames - offset) / scale
+            x_t = frames[torch.as_tensor(windows - first, device=dev)]
             if pad_h > 0 or pad_w > 0:
                 x_t = F.pad(x_t, (0, pad_w, 0, pad_h), mode="replicate")
             y_out = model(x_t)
             if pad_h > 0 or pad_w > 0:
                 y_out = y_out[:, :, :H, :W]
             res = decode_nms_postprocess(
-                y_out, raw_th=raw_th, phot_max=phot_max, z_max=z_max, px_size=px_size
+                y_out, raw_th=raw_th, phot_max=phot_max, z_max=z_max, px_size=px_size,
+                bg_max=sc["bg_max"], xy_origin=xy_origin,
             )
             res["frame_ix"] = np.array(batch_f, dtype=np.int64)[res["frame_ix"]]
             for k, v in res.items():

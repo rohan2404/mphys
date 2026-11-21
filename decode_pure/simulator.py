@@ -3,7 +3,7 @@ Pure-PyTorch 3D SMLM Simulator with Frozen Conv-Beta-VAE Background.
 Zero dependency on `decode` or `spline`; runs on CPU, CUDA, and Apple Silicon MPS.
 
 Mirrors the DECODE + VAE simulation pipeline from `05_simulator.ipynb` and `train_decode.py`:
-  1. EmitterSamplerPure: Poisson/blinking 3D emitters with Gamma photon distribution
+  1. EmitterSamplerPure: Poisson/blinking 3D emitters with normally distributed photon flux
   2. CubicSplinePSFPure: 3D tricubic spline PSF rendering from `.mat` calibration
   3. VAEBackgroundPure: Frozen Conv-Beta-VAE decoder + empirical manifest scaling
   4. CameraNoisePure: ONI Nanoimager sCMOS Poisson shot noise + Gaussian read noise
@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 
-from .infer import resolve_infer_device
+from .model import resolve_infer_device
 from .spline_psf import CubicSplinePSFPure
 
 
@@ -87,25 +87,30 @@ class VAEBackgroundPure:
         self.roi_stds = np.array([m["roi_std"] for m in manifest_list], dtype=np.float32)
 
     @torch.no_grad()
-    def sample(self, size: Tuple[int, ...], device: Union[str, torch.device] = "cpu") -> torch.Tensor:
+    def sample(self, size: Tuple[int, ...], device: Union[str, torch.device] = "cpu", chunk_size: int = 256) -> torch.Tensor:
         target_h, target_w = size[-2], size[-1]
         batch_shape = size[:-2]
         n_samples = int(np.prod(batch_shape)) if len(batch_shape) > 0 else 1
 
         vae_dev = next(self.vae.parameters()).device
-        z = torch.randn(n_samples, self.vae.latent_dim, device=vae_dev)
-        b_hat = self.vae.decode(z)
-        if b_hat.shape[-2:] != (target_h, target_w):
-            b_hat = F.interpolate(b_hat, size=(target_h, target_w), mode="bilinear", align_corners=False)
-        b_hat = (b_hat - b_hat.mean(dim=(2, 3), keepdim=True)) / (b_hat.std(dim=(2, 3), keepdim=True) + 1e-6)
+        out_chunks = []
+        for start in range(0, n_samples, chunk_size):
+            n_c = min(chunk_size, n_samples - start)
+            z = torch.randn(n_c, self.vae.latent_dim, device=vae_dev)
+            b_hat = self.vae.decode(z)
+            if b_hat.shape[-2:] != (target_h, target_w):
+                b_hat = F.interpolate(b_hat, size=(target_h, target_w), mode="bilinear", align_corners=False)
+            b_hat = (b_hat - b_hat.mean(dim=(2, 3), keepdim=True)) / (b_hat.std(dim=(2, 3), keepdim=True) + 1e-6)
 
-        idx = np.random.randint(0, len(self.roi_means), size=n_samples)
-        mu_t = torch.from_numpy(self.roi_means[idx]).to(vae_dev).view(n_samples, 1, 1, 1)
-        sig_scale = np.random.uniform(0.5, 1.5, size=n_samples).astype(np.float32)
-        sig_t = torch.from_numpy(self.roi_stds[idx] * sig_scale).to(vae_dev).view(n_samples, 1, 1, 1)
+            idx = np.random.randint(0, len(self.roi_means), size=n_c)
+            mu_t = torch.from_numpy(self.roi_means[idx]).to(vae_dev).view(n_c, 1, 1, 1)
+            sig_scale = np.random.uniform(0.5, 1.5, size=n_c).astype(np.float32)
+            sig_t = torch.from_numpy(self.roi_stds[idx] * sig_scale).to(vae_dev).view(n_c, 1, 1, 1)
 
-        b_phys = torch.clamp(mu_t + sig_t * b_hat, min=1.0).squeeze(1)
-        return b_phys.reshape(size).to(device)
+            b_phys = torch.clamp(mu_t + sig_t * b_hat, min=1.0).squeeze(1)
+            out_chunks.append(b_phys.to(device))
+
+        return torch.cat(out_chunks, dim=0).reshape(size)
 
 
 @dataclass
@@ -153,6 +158,7 @@ class EmitterSamplerPure:
         lifetime_avg: float = 1.0,
         frame_range: Tuple[int, int] = (0, 0),
         device: Union[str, torch.device] = "cpu",
+        intensity_th: Optional[float] = None,
     ):
         self.emitter_av = float(emitter_av)
         self.emitter_extent = tuple((float(a), float(b)) for a, b in emitter_extent)
@@ -161,87 +167,46 @@ class EmitterSamplerPure:
         self.frame_range = (int(frame_range[0]), int(frame_range[1]))
         self.device = torch.device(device)
 
-    def _sample_photons(self, n: int) -> torch.Tensor:
-        mu, sig = self.intensity_mu_sig
-        if sig <= 0:
-            return torch.full((n,), mu, dtype=torch.float32, device=self.device)
-        k = (mu / sig) ** 2
-        rate = mu / (sig ** 2)
-        dist = torch.distributions.Gamma(
-            concentration=torch.tensor(k, dtype=torch.float32, device=self.device),
-            rate=torch.tensor(rate, dtype=torch.float32, device=self.device),
-        )
-        return dist.sample((n,))
-
-    def _sample_xyz(self, n: int) -> torch.Tensor:
-        (x0, x1), (y0, y1), (z0, z1) = self.emitter_extent
-        u = torch.rand((n, 3), dtype=torch.float32, device=self.device)
-        x = x0 + (x1 - x0) * u[:, 0]
-        y = y0 + (y1 - y0) * u[:, 1]
-        z = z0 + (z1 - z0) * u[:, 2]
-        return torch.stack([x, y, z], dim=-1)
+        self.intensity_th = 1e-8 if intensity_th is None else float(intensity_th)
+        if self.lifetime_avg <= 0:
+            raise ValueError("lifetime_avg must be positive")
 
     def sample(self) -> EmitterSetPure:
         f0, f1 = self.frame_range
-        n_frames = f1 - f0 + 1
-        if n_frames <= 1:
-            n_em = int(np.random.poisson(max(0.0, self.emitter_av)))
-            if n_em == 0:
-                return EmitterSetPure(
-                    xyz_px=torch.zeros((0, 3), dtype=torch.float32, device=self.device),
-                    phot=torch.zeros((0,), dtype=torch.float32, device=self.device),
-                    frame_ix=torch.zeros((0,), dtype=torch.long, device=self.device),
-                    id=torch.zeros((0,), dtype=torch.long, device=self.device),
-                )
-            return EmitterSetPure(
-                xyz_px=self._sample_xyz(n_em),
-                phot=self._sample_photons(n_em),
-                frame_ix=torch.full((n_em,), f0, dtype=torch.long, device=self.device),
-                id=torch.arange(n_em, dtype=torch.long, device=self.device),
-            )
+        start = f0 - 3 * self.lifetime_avg
+        stop = f1 + 3 * self.lifetime_avg
+        n = np.random.poisson(self.emitter_av * (stop - start + 1) / (self.lifetime_avg + 1))
 
-        # Multi-frame blinking simulation
-        margin = max(2.0 * self.lifetime_avg, 2.0)
-        span = float(n_frames) + margin
-        lam_total = self.emitter_av * span / max(self.lifetime_avg, 1e-3)
-        n_emitters = int(np.random.poisson(max(0.0, lam_total)))
-        if n_emitters == 0:
-            return EmitterSetPure(
-                xyz_px=torch.zeros((0, 3), dtype=torch.float32, device=self.device),
-                phot=torch.zeros((0,), dtype=torch.float32, device=self.device),
-                frame_ix=torch.zeros((0,), dtype=torch.long, device=self.device),
-                id=torch.zeros((0,), dtype=torch.long, device=self.device),
-            )
+        # Draw each track on CPU as in DECODE, then transfer its visible frames.
+        extent = torch.tensor(self.emitter_extent, dtype=torch.float32)
+        xyz = torch.rand(n, 3) * (extent[:, 1] - extent[:, 0]) + extent[:, 0]
+        mu, sigma = self.intensity_mu_sig
+        flux = torch.normal(mu, sigma, size=(n,)).clamp_min(self.intensity_th)
+        t0 = start + torch.rand(n) * (stop - start)
+        duration = torch.distributions.Exponential(1 / self.lifetime_avg).rsample((n,))
+        te = t0 + duration
+        first, last = t0.floor().long(), te.floor().long()
+        ids = torch.arange(n)
 
-        xyz_base = self._sample_xyz(n_emitters)
-        phot_base = self._sample_photons(n_emitters)
-        t_on = torch.rand((n_emitters,), dtype=torch.float32, device=self.device) * span + (f0 - margin)
-        on_dur = torch.distributions.Exponential(
-            torch.tensor(1.0 / max(self.lifetime_avg, 1e-3), dtype=torch.float32, device=self.device)
-        ).sample((n_emitters,))
-        t_off = t_on + on_dur
-
-        frames_vec = torch.arange(f0, f1 + 1, dtype=torch.float32, device=self.device)
-        overlap = torch.clamp(
-            torch.minimum(frames_vec.unsqueeze(0) + 1.0, t_off.unsqueeze(1))
-            - torch.maximum(frames_vec.unsqueeze(0), t_on.unsqueeze(1)),
-            min=0.0,
-            max=1.0,
-        )  # (n_emitters, n_frames)
-
-        em_idx, f_rel = (overlap > 0.0).nonzero(as_tuple=True)
-        return EmitterSetPure(
-            xyz_px=xyz_base[em_idx],
-            phot=phot_base[em_idx] * overlap[em_idx, f_rel],
-            frame_ix=f0 + f_rel,
-            id=em_idx,
-        )
+        # LooseEmitterSet emits interior frames first, then first and last
+        # partial exposures. Single-frame acquisitions use the same blink law.
+        counts = (last - first - 1).clamp_min(0)
+        inner_ids = ids.repeat_interleave(counts)
+        offsets = torch.arange(len(inner_ids)) - (counts.cumsum(0) - counts)[inner_ids]
+        has_last = last > first
+        frame = torch.cat((first[inner_ids] + 1 + offsets, first, last[has_last]))
+        track = torch.cat((inner_ids, ids, ids[has_last]))
+        first_dt = torch.minimum(te - t0, first + 1 - t0)
+        last_dt = torch.minimum(te - t0, te - last)
+        phot = torch.cat((flux[inner_ids], flux * first_dt, (flux * last_dt)[has_last]))
+        keep = (frame >= f0) & (frame <= f1)
+        return EmitterSetPure(xyz[track[keep]], phot[keep], frame[keep], track[keep]).to(self.device)
 
 
 class CameraNoisePure:
     """
     ONI Nanoimager sCMOS camera noise model:
-      photons -> Poisson(photons * qe) photoelectrons -> ADU + read noise -> photons.
+      Photon shot noise and electron read noise are applied before ADU quantisation.
     """
 
     def __init__(
@@ -251,25 +216,39 @@ class CameraNoisePure:
         qe: float = 0.8,
         read_sigma: float = 1.6,
         convert2photons: bool = True,
+        spur_noise: float = 0.0,
+        em_gain: Optional[float] = None,
     ):
         self.baseline = float(baseline)
         self.e_per_adu = float(e_per_adu)
         self.qe = float(qe)
         self.read_sigma = float(read_sigma)
         self.convert2photons = bool(convert2photons)
+        self.spur_noise = float(spur_noise)
+        self.em_gain = em_gain
 
     @torch.no_grad()
     def forward(self, phot_frames: torch.Tensor) -> torch.Tensor:
-        rate = torch.clamp(phot_frames, min=0.0) * self.qe
+        rate = torch.clamp(phot_frames, min=0.0) * self.qe + self.spur_noise
         try:
             electrons = torch.poisson(rate)
         except (NotImplementedError, RuntimeError):
             electrons = torch.poisson(rate.cpu()).to(phot_frames.device)
 
-        adu = electrons / self.e_per_adu + torch.randn_like(electrons) * self.read_sigma + self.baseline
+        if self.em_gain is not None:
+            electrons = torch.distributions.Gamma(electrons, 1 / self.em_gain, validate_args=False).sample()
+        electrons = electrons + torch.randn_like(electrons) * self.read_sigma
+        adu = ((electrons / self.e_per_adu).floor() + self.baseline).clamp_min(0)
         if self.convert2photons:
-            return (adu - self.baseline) * (self.e_per_adu / self.qe)
+            return self.backward(adu)
         return adu
+
+
+    def backward(self, adu):
+        electrons = (adu - self.baseline) * self.e_per_adu
+        if self.em_gain is not None:
+            electrons = electrons / self.em_gain
+        return (electrons - self.spur_noise) / self.qe
 
 
 class SimulationPure:
@@ -293,8 +272,7 @@ class SimulationPure:
         self.frame_range = (int(frame_range[0]), int(frame_range[1]))
 
     @torch.no_grad()
-    def sample(self) -> Tuple[EmitterSetPure, torch.Tensor, torch.Tensor]:
-        em_set = self.em_sampler.sample()
+    def forward(self, em_set: EmitterSetPure) -> Tuple[torch.Tensor, torch.Tensor]:
         f0, f1 = self.frame_range
         n_frames = f1 - f0 + 1
         H, W = self.psf.img_shape
@@ -304,6 +282,12 @@ class SimulationPure:
         fg_frames = self.psf.forward(em_set.xyz_px, em_set.phot, frame_ix=rel_frame_ix, n_frames=n_frames)
         bg_maps = self.background.sample((n_frames, H, W), device=dev)
         noisy_frames = self.noise.forward(fg_frames + bg_maps)
+        return noisy_frames, bg_maps
+
+    @torch.no_grad()
+    def sample(self) -> Tuple[EmitterSetPure, torch.Tensor, torch.Tensor]:
+        em_set = self.em_sampler.sample()
+        noisy_frames, bg_maps = self.forward(em_set)
         return em_set, noisy_frames, bg_maps
 
 
@@ -313,11 +297,11 @@ def build_vae_simulator(
     manifest_rel: str = "localisation_workflow/vae_background/noise_maps/manifest.json",
     cal_rel: str = "data/bead_calibration/Beadzstack_3DLens_3dcal.mat",
     param_rel: str = "localisation_workflow/param_run.yaml",
-    z_range_nm: Tuple[float, float] = (-200.0, 200.0),
-    intensity_mu_sig: Tuple[float, float] = (1800.0, 750.0),
-    lifetime_avg: float = 1.0,
+    z_range_nm: Optional[Tuple[float, float]] = None,
+    intensity_mu_sig: Optional[Tuple[float, float]] = None,
+    lifetime_avg: Optional[float] = None,
     frame_range: Tuple[int, int] = (0, 0),
-    roi_size: Tuple[int, int] = (17, 17),
+    roi_size: Tuple[int, int] = None,
     device: str = "auto",
 ) -> SimulationPure:
     """
@@ -331,23 +315,26 @@ def build_vae_simulator(
     vae_m = SmoothBgBetaVAE(latent_dim=int(ckpt["latent_dim"])).to(dev)
     vae_m.load_state_dict(ckpt["model_state"], strict=True)
     vae_m.eval()
-    patch_sz = int(ckpt.get("patch_size", 64))
 
     manifest_data = json.loads((project_dir / manifest_rel).read_text())
     param = yaml.safe_load((project_dir / param_rel).read_text())
     cam = param["Camera"]
+    sim_param = param["Simulation"]
 
     psf = CubicSplinePSFPure.from_mat(
         mat_path=project_dir / cal_rel,
-        img_shape=(patch_sz, patch_sz),
-        roi_size=roi_size,
+        img_shape=tuple(sim_param["img_size"]),
+        roi_size=sim_param["roi_size"] if roi_size is None else roi_size,
+        roi_auto_center=sim_param["roi_auto_center"],
+        extent_origin=tuple(axis[0] for axis in sim_param["psf_extent"][:2]),
         device=dev,
     )
     em_sampler = EmitterSamplerPure(
-        emitter_av=24.0,
-        emitter_extent=((-0.5, patch_sz - 0.5), (-0.5, patch_sz - 0.5), tuple(z_range_nm)),
-        intensity_mu_sig=intensity_mu_sig,
-        lifetime_avg=lifetime_avg,
+        emitter_av=sim_param["emitter_av"],
+        emitter_extent=(*sim_param["emitter_extent"][:2], z_range_nm or sim_param["emitter_extent"][2]),
+        intensity_mu_sig=intensity_mu_sig or sim_param["intensity_mu_sig"],
+        intensity_th=sim_param.get("intensity_th"),
+        lifetime_avg=sim_param["lifetime_avg"] if lifetime_avg is None else lifetime_avg,
         frame_range=frame_range,
         device=dev,
     )
@@ -358,6 +345,7 @@ def build_vae_simulator(
         qe=float(cam["qe"]),
         read_sigma=float(cam["read_sigma"]),
         convert2photons=bool(cam.get("convert2photons", True)),
+        spur_noise=cam.get("spur_noise", 0.0), em_gain=cam.get("em_gain"),
     )
     return SimulationPure(psf=psf, em_sampler=em_sampler, background=bg, noise=noise, frame_range=frame_range)
 
@@ -386,7 +374,7 @@ def simulation(
 
 
 if __name__ == "__main__":
-    sim = build_vae_simulator(project_dir=Path(__file__).resolve().parents[2])
+    sim = build_vae_simulator(project_dir=Path(__file__).resolve().parents[1])
     frames, bg_maps, em_set, lam_av = simulation(sim, seed=2026)
     print(
         f"Simulated {tuple(frames.shape)} | lam={lam_av:.1f} | "

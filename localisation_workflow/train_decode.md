@@ -1,106 +1,85 @@
-# DECODE + VAE Training Handover (`train_decode.py`)
+# Train DECODE with a VAE background
 
-This guide explains how to set up the Conda environment and run [`train_decode.py`](file:///Users/rohan/Documents/projects/mphys/localisation_workflow/train_decode.py) on a local machine or a Linux GPU cluster.
+Run commands from the repository root. The [pure-PyTorch trainer](train_decode_pure.py) uses the top-level [decode_pure package](../decode_pure/) to simulate microscope frames, train SigmaMUNet, and validate localisations against simulated emitters. Its default input is three consecutive frames, with the middle frame supplying the target.
 
----
+## Environment and training inputs
 
-## 1. Environment & Conda Installation
+Activate a Python environment with a PyTorch build for the target device, then install the workflow dependencies. On this Mac, the shared environment is available with `source /Users/rohan/venvs/sharedenv/bin/activate`.
 
-`decode==0.10.2` requires **Python 3.8** and **PyTorch 1.12** (along with the compiled `spline` PSF package from `turagalab`).
-
-### Option A: Linux / Windows GPU Workstation or Cluster (CUDA — Recommended `pip`-First Setup)
 ```bash
-conda create -n decode_gpu python=3.8.20 -y
-conda activate decode_gpu
-
-pip install torch==1.12.0+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
-pip install numpy==1.19.5 scipy==1.8.0 pyyaml tqdm tifffile pandas scikit-image scikit-learn matplotlib seaborn h5py deprecated gitpython tensorboard requests
-
-conda install -c turagalab decode=0.10.2 spline=0.10.0 --no-deps -y
+python -m pip install torch numpy scipy pyyaml tifffile
 ```
 
-### Option B: CPU-Only (Local / Mac)
+For a cluster run, copy `decode_pure/`, `localisation_workflow/train_decode_pure.py`, and the following files with their relative paths intact.
+
+| Path from the repository root | Used for |
+| --- | --- |
+| `localisation_workflow/param_run.yaml` | Model, simulation, camera, and scaling settings |
+| `data/bead_calibration/Beadzstack_3DLens_3dcal.mat` | Calibrated 3D spline PSF |
+| `localisation_workflow/vae_background/bg_vae_64x64.pt` | Frozen background VAE |
+| `localisation_workflow/vae_background/noise_maps/manifest.json` | Measured background means and standard deviations |
+
+Training generates frames from these inputs. Raw TIFFs are needed for movie inference.
+
+## Train and resume
+
+For a quick CPU check, use a small acquisition and a separate output directory.
+
 ```bash
-conda create -n decode_cpu python=3.8.20 -y
-conda activate decode_cpu
-
-pip install torch==1.12.0
-pip install numpy==1.19.5 scipy==1.8.0 pyyaml tqdm tifffile pandas scikit-image scikit-learn matplotlib seaborn h5py deprecated gitpython tensorboard requests
-
-conda install -c turagalab decode=0.10.2 spline=0.10.0 --no-deps -y
+python localisation_workflow/train_decode_pure.py --device cpu --epochs 1 \
+  --pseudo-ds-size 17 --test-size 9 --batch-size 4 \
+  --out-dir localisation_workflow/decode_smoke
 ```
 
-*(Verified local environment versions: `python 3.8.20`, `torch 1.12.0.post2`, `decode 0.10.2`, `numpy 1.19.5`, `scipy 1.8.0`.)*
+For a full training run, choose a fresh directory. The example below keeps the new run separate from the weights already in `localisation_workflow/decode_model_pure/`.
 
----
-
-## 2. Files Needed on Another Computer / Cluster
-
-Keep the repository folder structure intact (or copy these 5 files with their relative paths):
-1. `localisation_workflow/train_decode.py` — training script
-2. `localisation_workflow/vae_background/bg_vae_64x64.pt` — trained Conv-$\beta$-VAE background weights
-3. `localisation_workflow/vae_background/noise_maps/manifest.json` — empirical $(\mu_{\mathrm{ROI}}, \sigma_{\mathrm{ROI}})$ photon scaling distribution
-4. `data/bead_calibration/Beadzstack_3DLens_3dcal.mat` — calibrated 3D cubic spline PSF
-5. `localisation_workflow/param_run.yaml` — your ONI Nanoimager DECODE configuration
-
-*(You do **not** need to copy the raw multi-GB `.tif` movies or the individual `.npy` noise maps to train DECODE, since `VAEBackground` generates backgrounds purely from `bg_vae_64x64.pt` + `manifest.json`.)*
-
----
-
-## 3. Running `train_decode.py`
-
-Run from the **repository root** (`/path/to/mphys`):
-
-### Full GPU Cluster Run (Default 3-Frame Temporal Mode, `--channels-in 3`)
 ```bash
-python localisation_workflow/train_decode.py \
-  --device auto \
-  --epochs 100 \
-  --batch-size 64 \
-  --num-workers 4
+python localisation_workflow/train_decode_pure.py --device auto --epochs 100 \
+  --out-dir localisation_workflow/decode_model_run
 ```
 
-### Fast Single-Frame Mode (`--channels-in 1`)
-If you want ~3× lower memory/compute per batch without temporal $(t-1, t, t+1)$ context:
+To resume, repeat the same command with `--resume`. The trainer restores `ckpt_latest.pt` from the selected directory and continues after the last completed epoch. Keep the original architecture, simulation settings, and seed. `--epochs` is the total epoch count for the run.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--device` | `auto` | Selects CUDA, then Apple MPS, then CPU. An explicit device such as `cuda:0` also works. |
+| `--channels-in` | `3` | Use `1` for single-frame training or `3` for temporal context. |
+| `--batch-size` | `32` | Training windows per batch |
+| `--pseudo-ds-size` / `--test-size` | `4096` / `256` | Final frame index of each simulated acquisition. Frame numbering starts at zero. Training data is sampled each epoch and validation data is fixed. |
+| `--em-av-min` / `--em-av-max` | `12` / `120` | Bounds for the mean emitter count per frame in a temporal chunk |
+| `--lifetime-avg` | `1.0` | Mean emitter on-time in frames |
+| `--lr` | `0.0006` | Initial learning rate |
+| `--out-dir` | `localisation_workflow/decode_model_pure` | Directory for checkpoints, run settings, and metrics |
+
+For example, `--pseudo-ds-size 17` generates frames 0 through 17. With three input channels this gives 16 training windows, enough for four batches of four.
+
+## Outputs and movie inference
+
+| File in the run directory | Contents |
+| --- | --- |
+| `model_best.pt` | Weights from the epoch with the lowest validation loss |
+| `model_final.pt` | Weights at the end of training |
+| `ckpt_latest.pt` | Latest completed epoch, weights, optimiser, scheduler, and best validation loss |
+| `param_run_used.yaml` | Model architecture, camera parameters, and scaling to use with these weights |
+| `training_log.csv` | Per-epoch loss, learning rate, Jaccard index, precision, recall, lateral and axial RMSE, and runtime |
+
+Use weights and YAML from the same run. For the full-run example above, the following command writes right-channel localisations to CSV. Coordinates are relative to the cropped channel and frame indices start at zero.
+
 ```bash
-python localisation_workflow/train_decode.py --device auto --channels-in 1 --epochs 100 --batch-size 64 --num-workers 4
+python -m decode_pure.infer \
+  --movie data/low_density_examples/RegistrationCheck_LowDensity_GapT_Exp1_GapT_SealG_F3.tif \
+  --weights localisation_workflow/decode_model_run/model_best.pt \
+  --param localisation_workflow/decode_model_run/param_run_used.yaml \
+  --out localisation_workflow/decode_model_run/locs_SealG_F3.csv \
+  --right-channel --device auto
 ```
 
-### Local Quick Smoke Test (CPU)
+## Original DECODE trainer
+
+The [original trainer](train_decode.py) uses DECODE 0.10.2 and compiled spline 0.10.0 in the existing `decode_intel` Conda environment. Its default output directory is `localisation_workflow/decode_model/`. This command runs a short local reference job.
+
 ```bash
-python localisation_workflow/train_decode.py \
-  --device cpu \
-  --epochs 2 \
-  --pseudo-ds-size 64 \
-  --test-size 16 \
-  --batch-size 16 \
-  --num-workers 0
+conda run -n decode_intel python localisation_workflow/train_decode.py \
+  --device cpu --epochs 1 --pseudo-ds-size 17 --test-size 9 --batch-size 4 \
+  --out-dir localisation_workflow/decode_legacy_smoke
 ```
-
-### Resume After Preemption / Crash
-```bash
-python localisation_workflow/train_decode.py --device auto --resume
-```
-
-### Useful Optional Flags
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--device` | `auto` | `auto` (picks `cuda:0` if available, else `cpu`), `cpu`, `cuda`, `cuda:0` |
-| `--channels-in` | `3` | `3` for 3-frame temporal context $(t-1, t, t+1)$; `1` for single-frame |
-| `--em-av-min` | `12.0` | Minimum Poisson emitter average per $64 \times 64$ patch |
-| `--em-av-max` | `120.0` | Maximum Poisson emitter average per $64 \times 64$ patch |
-| `--lifetime-avg` | `1.0` | Mean fluorophore on-time (frames) |
-| `--pseudo-ds-size` | `16384` | Newly simulated training frames per epoch |
-| `--test-size` | `512` | Fixed simulated validation frames |
-| `--num-workers` | `0` | DataLoader workers (`4` on Linux GPU cluster, `0` on macOS) |
-
----
-
-## 4. Outputs Saved in `localisation_workflow/decode_model/`
-
-To keep disk usage minimal, checkpoints are overwritten in place:
-- `ckpt_latest.pt` — overwritten every epoch (and on interrupt/crash) for `--resume`
-- `model_best.pt` — overwritten whenever simulated validation loss improves (`*BEST*`)
-- `model_final.pt` — final `SigmaMUNet` weights after the last epoch
-- `param_run_used.yaml` — matched DECODE config required alongside `model_best.pt` for inference
-- `training_log.csv` — per-epoch `train_loss`, `val_loss`, `jaccard`, `precision`, `recall`, `rmse_lat_nm`, `rmse_ax_nm`, `lr`, and runtime

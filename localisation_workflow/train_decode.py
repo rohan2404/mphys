@@ -122,15 +122,19 @@ class VAEBackground(decode.simulation.background.Background):
 
 class VariableDensityEmitterSampler:
     """
-    Lightweight proxy around DECODE's EmitterSamplerBlinking that draws a fresh
-    emitter_av ~ Uniform(em_av_min, em_av_max) on every `.sample()` call so the
-    network trains across sparse and crowded regimes simultaneously.
+    Lightweight proxy around DECODE's EmitterSamplerBlinking that varies emitter
+    density *within* every sampled acquisition (intra-epoch). It samples at
+    em_av_max and thins emitter tracks across temporal chunks to
+    Uniform(em_av_min, em_av_max), preserving multi-frame blinking continuity
+    for 3-channel temporal context while giving every epoch and validation set
+    a balanced mix of sparse and crowded frames.
     """
 
-    def __init__(self, base_sampler, em_av_min: float, em_av_max: float):
+    def __init__(self, base_sampler, em_av_min: float, em_av_max: float, chunk_frames: int = 32):
         self._base = base_sampler
         self.em_av_min = float(em_av_min)
         self.em_av_max = float(em_av_max)
+        self.chunk_frames = int(max(1, chunk_frames))
 
     def __getattr__(self, name):
         return getattr(self._base, name)
@@ -139,12 +143,38 @@ class VariableDensityEmitterSampler:
         return self.sample()
 
     def sample(self):
-        lam = float(np.random.uniform(self.em_av_min, self.em_av_max))
-        self._base._em_avg = lam
+        lam_max = self.em_av_max
+        self._base._em_avg = lam_max
         self._base._emitter_av_total = (
-            lam * self._base._num_frames_plus / (self._base.lifetime_avg + 1.0)
+            lam_max * self._base._num_frames_plus / (self._base.lifetime_avg + 1.0)
         )
-        return self._base.sample()
+        em = self._base.sample()
+        if len(em) == 0 or self.em_av_min >= lam_max:
+            return em
+
+        frame_ix = em.frame_ix.long()
+        f_min = int(frame_ix.min().item())
+        f_max = int(frame_ix.max().item())
+        n_frames = max(1, f_max - f_min + 1)
+        n_chunks = max(1, (n_frames + self.chunk_frames - 1) // self.chunk_frames)
+
+        # Draw one target density per temporal chunk ~ Uniform(em_av_min, em_av_max)
+        chunk_lams = np.random.uniform(self.em_av_min, lam_max, size=n_chunks)
+        chunk_probs = torch.as_tensor(chunk_lams / lam_max, dtype=torch.float32, device=frame_ix.device)
+        emitter_chunks = torch.clamp((frame_ix - f_min) // self.chunk_frames, 0, n_chunks - 1)
+
+        # Thin by unique emitter track ID when available so blinking tracks stay intact across t-1, t, t+1
+        em_id = em.id.long()
+        uniq_ids, inverse_ix = torch.unique(em_id, return_inverse=True)
+        if len(uniq_ids) > 1:
+            track_chunk = torch.zeros(len(uniq_ids), dtype=torch.long, device=frame_ix.device)
+            track_chunk[inverse_ix] = emitter_chunks
+            keep_track = torch.rand(len(uniq_ids), device=frame_ix.device) < chunk_probs[track_chunk]
+            keep_mask = keep_track[inverse_ix]
+        else:
+            keep_mask = torch.rand(len(em), device=frame_ix.device) < chunk_probs[emitter_chunks]
+
+        return em[keep_mask]
 
 
 # ------------------------------------------------------------------------------
