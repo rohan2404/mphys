@@ -16,9 +16,9 @@ Evaluation:
   dist_vol: null
   match_dims: 3
 Hardware:
-  device: cpu
+  device: cuda:0
   device_ix: 0
-  device_simulation: cpu
+  device_simulation: cuda:0
   num_worker_train: 0
   torch_multiprocessing_sharing_strategy: null
   torch_threads: 4
@@ -51,7 +51,7 @@ HyperParameter:
   auto_restart_param:
     num_restarts: 5
     restart_treshold: 100
-  batch_size: 16
+  batch_size: 64
   channels_in: 3
   channels_out: null
   chweight_stat:
@@ -61,7 +61,7 @@ HyperParameter:
   ds_lifetime: null
   emitter_label_photon_min: 100.0
   epoch_0: null
-  epochs: 1
+  epochs: 200
   fgbg_factor: null
   grad_mod: null
   learning_rate_scheduler: ReduceLROnPlateau
@@ -80,11 +80,11 @@ HyperParameter:
     weight_decay: 0.1
   optimizer: AdamW
   photon_threshold: null
-  pseudo_ds_size: 64
+  pseudo_ds_size: 16384
 InOut:
-  calibration_file: /Users/rohan/Documents/projects/mphys/data/bead_calibration/Beadzstack_3DLens_3dcal.mat
+  calibration_file: D:\Rohan\projects\mphys\data\bead_calibration\Beadzstack_3DLens_3dcal.mat
   checkpoint_init: null
-  experiment_out: /Users/rohan/Documents/projects/mphys/localisation_workflow/decode_model
+  experiment_out: D:\Rohan\projects\mphys\localisation_workflow\decode_model
   model_init: null
 Meta:
   version: null
@@ -140,4 +140,4 @@ TestSet:
   - 64
   - 64
   mode: simulat
-  test_size: 16
+  test_size: 512
