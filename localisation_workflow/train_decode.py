@@ -430,7 +430,10 @@ def main():
 
     if args.resume and ckpt_latest_path.exists():
         print(f'[RESUME] Loading checkpoint from {ckpt_latest_path}...', flush=True)
-        ckpt_data = torch.load(ckpt_latest_path, map_location=torch_dev)
+        # PyTorch 1.12 keeps AdamW's step counter on its loaded device.
+        # Loading on CPU leaves the counter there while load_state_dict moves
+        # the model and optimiser moment tensors to the parameter device.
+        ckpt_data = torch.load(ckpt_latest_path, map_location='cpu')
         model.load_state_dict(ckpt_data['model_state'])
         optimizer.load_state_dict(ckpt_data['optimizer_state'])
         lr_scheduler.load_state_dict(ckpt_data['scheduler_state'])

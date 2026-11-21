@@ -563,7 +563,8 @@ def train(args, stack):
     best_val_loss = float("inf")
     wandb_ref = {}
     if args.resume and ckpt_latest_path.exists():
-        ckpt_data = _torch_load_compat(ckpt_latest_path, map_location=torch_dev)
+        # Keep legacy AdamW step counters on CPU when resuming with PyTorch 1.12.
+        ckpt_data = _torch_load_compat(ckpt_latest_path, map_location="cpu")
         wandb_ref = ckpt_data.get("wandb_run") or {}
         model.load_state_dict(ckpt_data["model_state"])
         optimizer.load_state_dict(ckpt_data["optimizer_state"])
