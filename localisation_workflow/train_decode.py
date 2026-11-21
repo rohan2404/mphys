@@ -39,6 +39,37 @@ import decode.utils
 from decode.neuralfitter.train.random_simulation import setup_random_simulation
 
 
+class StableGaussianMMLoss(decode.neuralfitter.loss.GaussianMMLoss):
+    """DECODE mixture loss with higher-precision categorical normalization."""
+
+    def _compute_gmm_loss(self, p, pxyz_mu, pxyz_sig, pxyz_tar, mask):
+        if not torch.isfinite(p).all() or (p < 0).any() or (p.sum(dim=(-2, -1)) <= 0).any():
+            raise ValueError("Non-finite or invalid detection probabilities in model output")
+
+        batch_size = p.shape[0]
+        p_mean = p.sum(dim=(-2, -1))
+        p_var = (p - p.square()).sum(dim=(-2, -1))
+        count = mask.sum(-1)
+        count_log_prob = torch.distributions.Normal(p_mean, p_var.sqrt()).log_prob(count) * count
+
+        # Categorical's float32 simplex validation can fail for long probability
+        # vectors even after normalization. Keep its normalization in float64.
+        mix = torch.distributions.Categorical(probs=p.reshape(batch_size, -1).double())
+        indices = tuple((p + 1).nonzero(as_tuple=False).transpose(1, 0))
+        means = pxyz_mu[indices[0], :, indices[1], indices[2]]
+        means[:, 1] += self._offset2coord.bin_ctr_x[indices[1]].to(means.device)
+        means[:, 2] += self._offset2coord.bin_ctr_y[indices[2]].to(means.device)
+        means = means.reshape(batch_size, -1, 4)
+        sigmas = pxyz_sig[indices[0], :, indices[1], indices[2]].reshape(batch_size, -1, 4)
+        components = torch.distributions.Independent(torch.distributions.Normal(means, sigmas), 1)
+        mixture = torch.distributions.MixtureSameFamily(mix, components)
+
+        if mask.sum():
+            log_prob = mixture.log_prob(pxyz_tar.transpose(0, 1)).transpose(0, 1)
+            count_log_prob = count_log_prob + (log_prob * mask).sum(-1)
+        return -count_log_prob
+
+
 # ------------------------------------------------------------------------------
 # 1. Frozen Conv-Beta-VAE Architecture & DECODE Background Wrapper
 # ------------------------------------------------------------------------------
@@ -387,6 +418,11 @@ def main():
     nolog = decode_logger.NoLog()
     ds_train, ds_test, model, model_ls, optimizer, criterion, lr_scheduler, grad_mod, post_processor, matcher, _ = \
         live_engine.setup_trainer(sim_train, sim_test, nolog, model_final_path, ckpt_latest_path, args.device_resolved, param)
+    criterion = StableGaussianMMLoss(
+        xextent=param.Simulation.psf_extent[0], yextent=param.Simulation.psf_extent[1],
+        img_shape=param.Simulation.img_size, device=args.device_resolved,
+        chweight_stat=param.HyperParameter.chweight_stat,
+    )
     dl_train, dl_test = live_engine.setup_dataloader(param, ds_train, ds_test)
 
     start_epoch = 0
@@ -489,20 +525,14 @@ def main():
         print('=' * 76, flush=True)
 
     except KeyboardInterrupt:
-        print(f'\n[INTERRUPTED] KeyboardInterrupt at epoch {current_epoch+1}. Saving emergency checkpoint...', flush=True)
-        save_overwritten_checkpoint(ckpt_latest_path, model, optimizer, lr_scheduler, max(0, current_epoch - 1), best_val_loss, args)
-        print(f'[SAVED] Emergency checkpoint written to {ckpt_latest_path}. Resume with --resume.', flush=True)
+        print(f'\n[INTERRUPTED] Epoch {current_epoch+1} was incomplete. '
+              f'The latest completed checkpoint is {ckpt_latest_path}.', flush=True)
         sys.exit(130)
 
     except Exception as exc:
         print(f'\n[ERROR] Training failed at epoch {current_epoch+1}: {exc}', flush=True)
         traceback.print_exc()
-        if 'model' in locals() and 'optimizer' in locals():
-            try:
-                save_overwritten_checkpoint(ckpt_latest_path, model, optimizer, lr_scheduler, max(0, current_epoch - 1), best_val_loss, args)
-                print(f'[SAVED] Emergency checkpoint written to {ckpt_latest_path}.', flush=True)
-            except Exception as save_exc:
-                print(f'[WARNING] Could not write emergency checkpoint: {save_exc}', flush=True)
+        print(f'[INFO] The latest completed checkpoint remains at {ckpt_latest_path}.', flush=True)
         sys.exit(1)
 
 

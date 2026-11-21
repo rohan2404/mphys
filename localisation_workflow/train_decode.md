@@ -53,6 +53,22 @@ To resume, repeat the same command with `--resume`. The trainer restores `ckpt_l
 
 For example, `--pseudo-ds-size 17` generates frames 0 through 17. With three input channels this gives 16 training windows, enough for four batches of four.
 
+## Monitor training with Weights & Biases
+
+Tracking is off by default. To enable it, install the optional SDK in the training environment and authenticate on the machine running training.
+
+```bash
+python -m pip install wandb
+wandb login
+python localisation_workflow/train_decode_pure.py --device auto --epochs 100 \
+  --out-dir localisation_workflow/decode_model_run \
+  --wandb --wandb-project mphys-localisation --wandb-name decode-3frame
+```
+
+Open the W&B URL printed by the trainer. Batch loss updates on the first, every tenth, and final batch of each epoch. The epoch charts include training and validation loss, best validation loss, learning rate, Jaccard index, precision, recall, lateral and axial RMSE in nm, and elapsed seconds.
+
+For a cluster job, supply `WANDB_API_KEY` through the job environment or add `--wandb-api-key-file /path/to/secret` to read a file containing the key. Use `--wandb-entity TEAM` to select a team. To continue the same online dashboard, repeat the training command with `--resume --wandb` and the same output directory. The checkpoint stores the W&B run ID, project, and entity. An older checkpoint without a run ID starts a new dashboard.
+
 ## Outputs and movie inference
 
 | File in the run directory | Contents |

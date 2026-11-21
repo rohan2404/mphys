@@ -20,7 +20,9 @@ Examples:
 import argparse
 import csv
 import math
+import os
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Tuple
 
@@ -416,12 +418,13 @@ def compute_val_metrics_pure(
 # ------------------------------------------------------------------------------
 # 4. Main Training Routine
 # ------------------------------------------------------------------------------
-def save_overwritten_checkpoint(ckpt_file: Path, model, optimizer, lr_scheduler, epoch: int, best_val: float, args):
+def save_overwritten_checkpoint(ckpt_file: Path, model, optimizer, lr_scheduler, epoch: int, best_val: float, args, wandb_run=None):
     tmp_file = ckpt_file.with_suffix(".tmp")
     torch.save({
         "epoch": epoch,
         "best_val_loss": best_val,
         "loss_version": 2,
+        "wandb_run": wandb_run,
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
         "scheduler_state": lr_scheduler.state_dict(),
@@ -458,11 +461,22 @@ def parse_args():
 
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    tracking = parser.add_argument_group("Weights & Biases")
+    tracking.add_argument("--wandb", action="store_true", help="Enable remote training metrics")
+    tracking.add_argument("--wandb-project", help="W&B project (default: mphys-localisation)")
+    tracking.add_argument("--wandb-entity", help="W&B user or team")
+    tracking.add_argument("--wandb-name", help="Display name for the run")
+    tracking.add_argument("--wandb-api-key-file", metavar="PATH",
+                          help="Read the API key from a file (default: WANDB_API_KEY or wandb login)")
     return parser.parse_args()
 
 
 def main():
-    args = parse_args()
+    with ExitStack() as stack:
+        train(parse_args(), stack)
+
+
+def train(args, stack):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
@@ -547,8 +561,10 @@ def main():
 
     start_epoch = 0
     best_val_loss = float("inf")
+    wandb_ref = {}
     if args.resume and ckpt_latest_path.exists():
         ckpt_data = _torch_load_compat(ckpt_latest_path, map_location=torch_dev)
+        wandb_ref = ckpt_data.get("wandb_run") or {}
         model.load_state_dict(ckpt_data["model_state"])
         optimizer.load_state_dict(ckpt_data["optimizer_state"])
         start_epoch = int(ckpt_data["epoch"]) + 1
@@ -558,6 +574,34 @@ def main():
         else:
             print("[RESUME] Starting a new validation-loss history for the corrected objective.", flush=True)
         print(f"[RESUME] Resuming from epoch {start_epoch + 1} (best_val_loss={best_val_loss:.4f})", flush=True)
+
+    run = None
+    if args.wandb:
+        try:
+            import wandb
+        except ModuleNotFoundError as exc:
+            if exc.name != "wandb":
+                raise
+            raise SystemExit("--wandb requires the SDK. Install it with: python -m pip install wandb") from exc
+
+        if args.wandb_api_key_file:
+            key = Path(args.wandb_api_key_file).expanduser().read_text().strip()
+            if not key:
+                raise ValueError("The W&B API key file is empty")
+            os.environ["WANDB_API_KEY"] = key
+        run = stack.enter_context(wandb.init(
+            project=args.wandb_project or wandb_ref.get("project") or os.getenv("WANDB_PROJECT") or "mphys-localisation",
+            entity=args.wandb_entity or wandb_ref.get("entity") or None,
+            name=args.wandb_name, id=wandb_ref.get("id"), resume="allow" if wandb_ref else None,
+            dir=str(out_dir),
+            config={"hyperparameters": hp, "simulation": sim_param, "device": dev_str,
+                    "seed": args.seed, "em_av_min": args.em_av_min, "em_av_max": args.em_av_max},
+        ))
+        wandb_ref = {"id": run.id, "entity": run.entity, "project": run.project}
+        run.define_metric("epoch/*", step_metric="epoch")
+        run.define_metric("train/batch_loss", step_metric="train/epoch_progress")
+        if run.url:
+            print(f"[W&B] {run.url}", flush=True)
 
     if not log_csv_path.exists() or not args.resume:
         with open(log_csv_path, "w", newline="") as f:
@@ -629,6 +673,8 @@ def main():
                 n_tr_batches += 1
 
                 pct = n_tr_batches / max(1, total_batches)
+                if run is not None and (n_tr_batches == 1 or n_tr_batches % 10 == 0 or n_tr_batches == total_batches):
+                    run.log({"train/batch_loss": loss_val, "train/epoch_progress": epoch + pct})
                 bar_len = 20
                 filled = int(bar_len * pct)
                 bar = "=" * filled + "-" * (bar_len - filled)
@@ -679,7 +725,7 @@ def main():
                 best_val_loss = val_loss
                 torch.save(model.state_dict(), model_best_path)
 
-            save_overwritten_checkpoint(ckpt_latest_path, model, optimizer, lr_scheduler, epoch, best_val_loss, args)
+            save_overwritten_checkpoint(ckpt_latest_path, model, optimizer, lr_scheduler, epoch, best_val_loss, args, wandb_ref)
 
             ep_sec = time.time() - t0_ep
             eta_min = (ep_sec * (args.epochs - epoch - 1)) / 60.0
@@ -698,6 +744,13 @@ def main():
                     epoch + 1, f"{lr_now:.6e}", f"{train_loss:.6f}", f"{val_loss:.6f}",
                     f"{jac:.4f}", f"{prec:.4f}", f"{rec:.4f}", f"{rmse_lat:.2f}", f"{rmse_ax:.2f}", f"{ep_sec:.2f}",
                 ])
+
+            if run is not None:
+                run.log({"epoch": epoch + 1, "epoch/lr": lr_now, "epoch/train_loss": train_loss,
+                         "epoch/val_loss": val_loss, "epoch/best_val_loss": best_val_loss,
+                         "epoch/jaccard": jac, "epoch/precision": prec, "epoch/recall": rec,
+                         "epoch/rmse_lat_nm": rmse_lat, "epoch/rmse_ax_nm": rmse_ax,
+                         "epoch/duration_sec": ep_sec})
 
         torch.save(model.state_dict(), model_final_path)
         total_min = (time.time() - t0_all) / 60.0
